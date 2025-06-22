@@ -345,6 +345,59 @@ class AbsDatabaseWeb extends WebPlugin {
       ]
     }
   }
+
+  async syncLibraryMetadata({ libraryId, forceRefresh }) {
+    // Web implementation - store in localStorage with size limits
+    const key = `library_metadata_${libraryId}`;
+    const syncKey = `library_sync_${libraryId}`;
+    
+    // For web, we'll just mark it as synced
+    localStorage.setItem(syncKey, JSON.stringify({
+      synced: 0,
+      total: 0,
+      lastSync: Date.now()
+    }));
+    
+    return { success: true };
+  }
+
+  async getLibraryMetadata({ libraryId, offset, limit }) {
+    // Web implementation returns empty for now
+    return {
+      results: [],
+      total: 0,
+      offset: offset || 0,
+      limit: limit || 100
+    };
+  }
+
+  async searchLibraryMetadata({ libraryId, query }) {
+    // Web implementation returns empty for now
+    return {
+      results: [],
+      query: query
+    };
+  }
+
+  async getLibrarySyncProgress({ libraryId }) {
+    const syncKey = `library_sync_${libraryId}`;
+    const syncData = localStorage.getItem(syncKey);
+    
+    if (syncData) {
+      const data = JSON.parse(syncData);
+      return {
+        synced: data.synced || 0,
+        total: data.total || 0,
+        percentage: 0
+      };
+    }
+    
+    return {
+      synced: 0,
+      total: 0,
+      percentage: 0
+    };
+  }
 }
 
 const AbsDatabase = registerPlugin('AbsDatabase', {

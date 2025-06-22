@@ -1,362 +1,562 @@
 <template>
-  <div id="bookshelf" class="w-full max-w-full h-full" @scroll="onScroll">
-    <!-- Virtual scrolling container with dynamic height -->
-    <div 
-      :style="{ height: totalHeight + 'px', position: 'relative' }"
-      class="virtual-scroll-container"
-    >
-      <!-- Visible items container -->
-      <div 
-        :style="{ 
-          transform: `translateY(${offsetY}px)`,
-          position: 'absolute',
-          top: 0,
-          left: 0,
-          right: 0
-        }"
-      >
-        <template v-for="item in visibleItems" :key="item.id">
-          <component
-            :is="getCardComponent(item.type)"
-            :ref="'item-' + item.index"
-            :libraryItem="item.data"
-            :index="item.index"
-            @loaded="onItemLoaded(item.index)"
-          />
-        </template>
+  <div id="bookshelf" class="w-full max-w-full h-full">
+    <template v-for="shelf in Math.min(totalShelves, shelvesPerPage + 2)">
+      <div :key="shelf" class="w-full px-2 relative" :class="showBookshelfListView || altViewEnabled ? '' : 'bookshelfRow'" :id="`shelf-${shelf - 1}`" :style="{ height: shelfHeight + 'px' }">
+        <div v-if="!showBookshelfListView && !altViewEnabled" class="w-full absolute bottom-0 left-0 z-30 bookshelfDivider" style="min-height: 16px" :class="`h-${shelfDividerHeightIndex}`" />
+        <div v-else-if="showBookshelfListView" class="flex border-t border-white border-opacity-10" />
       </div>
+    </template>
 
-      <!-- Loading indicators -->
-      <div v-if="isLoadingTop" class="loading-indicator loading-top">
-        Loading...
-      </div>
-      <div v-if="isLoadingBottom" class="loading-indicator loading-bottom">
-        Loading...
-      </div>
-    </div>
-
-    <!-- Empty state -->
-    <div v-show="!totalEntities && initialized" class="w-full py-16 text-center text-xl">
-      <div class="py-4">No {{ entityName }}</div>
+    <div v-show="!entities.length && initialized" class="w-full py-16 text-center text-xl">
+      <div v-if="page === 'collections'" class="py-4">{{ $strings.MessageNoCollections }}</div>
+      <div v-else class="py-4 capitalize">No {{ entityName }}</div>
+      <ui-btn v-if="hasFilter" @click="clearFilter">{{ $strings.ButtonClearFilter }}</ui-btn>
     </div>
   </div>
 </template>
 
 <script>
-import { debounce } from 'lodash'
+import bookshelfCardsHelpers from '@/mixins/bookshelfCardsHelpers'
 
 export default {
-  name: 'OptimizedLazyBookshelf',
   props: {
     page: String,
     seriesId: String
   },
+  mixins: [bookshelfCardsHelpers],
   data() {
     return {
-      // Virtual scrolling properties
-      itemHeight: 200, // Estimated item height
-      containerHeight: 0,
-      scrollTop: 0,
-      visibleStartIndex: 0,
-      visibleEndIndex: 0,
-      bufferSize: 5, // Items to render outside viewport
-      
-      // Data management
-      totalEntities: 0,
-      loadedChunks: new Map(), // Map<chunkIndex, items[]>
-      chunkSize: 100,
-      maxCachedChunks: 10,
-      
-      // Component recycling
-      componentPool: new Map(), // Map<componentType, component[]>
-      activeComponents: new Map(), // Map<index, component>
-      maxPoolSize: 50,
-      
-      // Loading states
-      isLoadingTop: false,
-      isLoadingBottom: false,
+      routeFullPath: null,
+      entitiesPerShelf: 2,
+      bookshelfHeight: 0,
+      bookshelfWidth: 0,
+      bookshelfMarginLeft: 0,
+      shelvesPerPage: 0,
+      currentPage: 0,
+      booksPerFetch: 20,
       initialized: false,
-      
-      // API management
-      activeRequests: new Map(),
-      cancelTokens: new Map(),
-      
-      // Current visible items for rendering
-      visibleItems: []
+      currentSFQueryString: null,
+      isFetchingEntities: false,
+      entities: [],
+      totalEntities: 0,
+      totalShelves: 0,
+      entityComponentRefs: {},
+      entityIndexesMounted: [],
+      pagesLoaded: {},
+      isFirstInit: false,
+      pendingReset: false,
+      localLibraryItems: []
     }
   },
-
+  watch: {
+    showBookshelfListView(newVal) {
+      this.resetEntities()
+    },
+    seriesId() {
+      this.resetEntities()
+    }
+  },
   computed: {
-    totalHeight() {
-      return this.totalEntities * this.itemHeight
+    user() {
+      return this.$store.state.user.user
     },
-
-    offsetY() {
-      return this.visibleStartIndex * this.itemHeight
+    isBookEntity() {
+      return this.entityName === 'books' || this.entityName === 'series-books'
     },
-
+    shelfDividerHeightIndex() {
+      if (this.isBookEntity) return 4
+      return 6
+    },
+    bookshelfListView() {
+      return this.$store.state.globals.bookshelfListView
+    },
+    showBookshelfListView() {
+      return this.isBookEntity && this.bookshelfListView
+    },
+    sortingIgnorePrefix() {
+      return this.$store.getters['getServerSetting']('sortingIgnorePrefix')
+    },
     entityName() {
-      return this.page === 'collections' ? 'collections' : 'items'
+      return this.page
+    },
+    hasFilter() {
+      if (this.page === 'series' || this.page === 'collections' || this.page === 'playlists') return false
+      return this.filterBy !== 'all'
+    },
+    orderBy() {
+      return this.$store.getters['user/getUserSetting']('mobileOrderBy')
+    },
+    orderDesc() {
+      return this.$store.getters['user/getUserSetting']('mobileOrderDesc')
+    },
+    filterBy() {
+      return this.$store.getters['user/getUserSetting']('mobileFilterBy')
+    },
+    collapseSeries() {
+      return this.$store.getters['user/getUserSetting']('collapseSeries')
+    },
+    collapseBookSeries() {
+      return this.$store.getters['user/getUserSetting']('collapseBookSeries')
+    },
+    isCoverSquareAspectRatio() {
+      return this.bookCoverAspectRatio === 1
+    },
+    bookCoverAspectRatio() {
+      return this.$store.getters['libraries/getBookCoverAspectRatio']
+    },
+    bookWidth() {
+      const availableWidth = window.innerWidth - 16
+      let coverSize = 100
+
+      // Smaller screens fill width with 2 items per row
+      if (availableWidth <= 400) {
+        coverSize = Math.floor(availableWidth / 2 - 24)
+        if (coverSize < 120) {
+          // Fallback to 1 item per row
+          coverSize = Math.min(availableWidth - 24, 200)
+        }
+        if (this.isCoverSquareAspectRatio || this.entityName === 'playlists') coverSize /= 1.6
+      }
+
+      if (this.isCoverSquareAspectRatio || this.entityName === 'playlists') return coverSize * 1.6
+      return coverSize
+    },
+    bookHeight() {
+      if (this.isCoverSquareAspectRatio || this.entityName === 'playlists') return this.bookWidth
+      return this.bookWidth * 1.6
+    },
+    entityWidth() {
+      if (this.showBookshelfListView) return this.bookshelfWidth - 16
+      if (this.isBookEntity || this.entityName === 'playlists') return this.bookWidth
+      return this.bookWidth * 2
+    },
+    entityHeight() {
+      if (this.showBookshelfListView) return 88
+      return this.bookHeight
+    },
+    currentLibraryId() {
+      return this.$store.state.libraries.currentLibraryId
+    },
+    currentLibraryMediaType() {
+      return this.$store.getters['libraries/getCurrentLibraryMediaType']
+    },
+    shelfHeight() {
+      if (this.showBookshelfListView) return this.entityHeight + 16
+      if (this.altViewEnabled) {
+        var extraTitleSpace = this.isBookEntity ? 80 : 40
+        return this.entityHeight + extraTitleSpace * this.sizeMultiplier
+      }
+      return this.entityHeight + 40
+    },
+    totalEntityCardWidth() {
+      if (this.showBookshelfListView) return this.entityWidth
+      // Includes margin
+      return this.entityWidth + 24
+    },
+    altViewEnabled() {
+      return this.$store.getters['getAltViewEnabled']
+    },
+    sizeMultiplier() {
+      const baseSize = this.isCoverSquareAspectRatio ? 192 : 120
+      return this.entityWidth / baseSize
     }
   },
-
-  mounted() {
-    this.initializeVirtualScrolling()
-    this.loadInitialData()
-  },
-
-  beforeDestroy() {
-    this.cleanup()
-  },
-
   methods: {
-    initializeVirtualScrolling() {
-      this.containerHeight = this.$el.clientHeight
-      this.calculateVisibleRange()
-      
-      // Setup resize observer
-      if (window.ResizeObserver) {
-        this.resizeObserver = new ResizeObserver((entries) => {
-          this.containerHeight = entries[0].contentRect.height
-          this.calculateVisibleRange()
-          this.updateVisibleItems()
-        })
-        this.resizeObserver.observe(this.$el)
-      }
-    },
-
-    onScroll: debounce(function(event) {
-      this.scrollTop = event.target.scrollTop
-      this.calculateVisibleRange()
-      this.updateVisibleItems()
-    }, 16), // ~60fps
-
-    calculateVisibleRange() {
-      const visibleCount = Math.ceil(this.containerHeight / this.itemHeight)
-      
-      this.visibleStartIndex = Math.max(0, 
-        Math.floor(this.scrollTop / this.itemHeight) - this.bufferSize
-      )
-      
-      this.visibleEndIndex = Math.min(this.totalEntities - 1,
-        this.visibleStartIndex + visibleCount + (this.bufferSize * 2)
-      )
-    },
-
-    async updateVisibleItems() {
-      if (this.visibleStartIndex < 0 || this.visibleEndIndex < 0) return
-
-      // Load required chunks
-      await this.loadRequiredChunks()
-      
-      // Recycle components outside visible range
-      this.recycleInvisibleComponents()
-      
-      // Update visible items array
-      this.visibleItems = []
-      for (let i = this.visibleStartIndex; i <= this.visibleEndIndex; i++) {
-        const item = await this.getItemAtIndex(i)
-        if (item) {
-          this.visibleItems.push({
-            id: item.id || i,
-            index: i,
-            data: item,
-            type: this.getItemType(item)
-          })
-        }
-      }
-    },
-
-    async loadRequiredChunks() {
-      const startChunk = Math.floor(this.visibleStartIndex / this.chunkSize)
-      const endChunk = Math.floor(this.visibleEndIndex / this.chunkSize)
-      
-      const loadPromises = []
-      for (let chunkIndex = startChunk; chunkIndex <= endChunk; chunkIndex++) {
-        if (!this.loadedChunks.has(chunkIndex)) {
-          loadPromises.push(this.loadChunk(chunkIndex))
-        }
-      }
-      
-      await Promise.all(loadPromises)
-    },
-
-    async loadChunk(chunkIndex) {
-      const requestKey = `chunk-${chunkIndex}`
-      
-      // Return existing request if in progress
-      if (this.activeRequests.has(requestKey)) {
-        return this.activeRequests.get(requestKey)
-      }
-
-      // Show loading indicator
-      if (chunkIndex === 0) this.isLoadingTop = true
-      else this.isLoadingBottom = true
-
-      try {
-        const offset = chunkIndex * this.chunkSize
-        const loadPromise = this.fetchChunkData(offset, this.chunkSize)
-        this.activeRequests.set(requestKey, loadPromise)
-        
-        const chunkData = await loadPromise
-        
-        // Implement LRU cache
-        if (this.loadedChunks.size >= this.maxCachedChunks) {
-          const oldestChunk = this.loadedChunks.keys().next().value
-          this.loadedChunks.delete(oldestChunk)
-        }
-        
-        this.loadedChunks.set(chunkIndex, chunkData)
-        return chunkData
-        
-      } catch (error) {
-        console.error(`Failed to load chunk ${chunkIndex}:`, error)
-        return []
-      } finally {
-        this.activeRequests.delete(requestKey)
-        this.isLoadingTop = false
-        this.isLoadingBottom = false
-      }
-    },
-
-    async fetchChunkData(offset, limit) {
-      // This would be replaced with actual API call
-      const response = await this.$api.getLibraryItems({
-        offset,
-        limit,
-        libraryId: this.currentLibraryId
+    clearFilter() {
+      this.$store.dispatch('user/updateUserSettings', {
+        mobileFilterBy: 'all'
       })
-      
-      return response.results || []
     },
+    async fetchEntities(page) {
+      const startIndex = page * this.booksPerFetch
 
-    async getItemAtIndex(index) {
-      const chunkIndex = Math.floor(index / this.chunkSize)
-      const chunk = this.loadedChunks.get(chunkIndex)
-      
-      if (!chunk) {
-        await this.loadChunk(chunkIndex)
-        return this.getItemAtIndex(index) // Retry after loading
+      this.isFetchingEntities = true
+
+      if (!this.initialized) {
+        this.currentSFQueryString = this.buildSearchParams()
       }
-      
-      const itemIndex = index % this.chunkSize
-      return chunk[itemIndex]
-    },
 
-    getItemType(item) {
-      // Determine component type based on item
-      if (this.page === 'collections') return 'collection'
-      if (item.mediaType === 'podcast') return 'podcast'
-      return 'book'
-    },
+      const entityPath = this.entityName === 'books' || this.entityName === 'series-books' ? `items` : this.entityName
+      const sfQueryString = this.currentSFQueryString ? this.currentSFQueryString + '&' : ''
+      const fullQueryString = `?${sfQueryString}limit=${this.booksPerFetch}&page=${page}&minified=1&include=rssfeed,numEpisodesIncomplete`
 
-    getCardComponent(type) {
-      const componentMap = {
-        book: 'book-card',
-        podcast: 'podcast-card',
-        collection: 'collection-card'
+      const payload = await this.$nativeHttp.get(`/api/libraries/${this.currentLibraryId}/${entityPath}${fullQueryString}`).catch((error) => {
+        console.error('failed to fetch books', error)
+        return null
+      })
+
+      this.isFetchingEntities = false
+      if (this.pendingReset) {
+        this.pendingReset = false
+        this.resetEntities()
+        return
       }
-      return componentMap[type] || 'book-card'
-    },
+      if (payload && payload.results) {
+        console.log('Received payload', payload)
+        if (!this.initialized) {
+          this.initialized = true
+          this.totalEntities = payload.total
+          this.totalShelves = Math.ceil(this.totalEntities / this.entitiesPerShelf)
+          this.entities = new Array(this.totalEntities)
+          this.$eventBus.$emit('bookshelf-total-entities', this.totalEntities)
+        }
 
-    recycleInvisibleComponents() {
-      for (const [index, component] of this.activeComponents) {
-        if (index < this.visibleStartIndex || index > this.visibleEndIndex) {
-          this.recycleComponent(component)
-          this.activeComponents.delete(index)
+        for (let i = 0; i < payload.results.length; i++) {
+          const index = i + startIndex
+          this.entities[index] = payload.results[i]
+          if (this.entityComponentRefs[index]) {
+            this.entityComponentRefs[index].setEntity(this.entities[index])
+
+            if (this.isBookEntity) {
+              const localLibraryItem = this.localLibraryItems.find((lli) => lli.libraryItemId == this.entities[index].id)
+              if (localLibraryItem) {
+                this.entityComponentRefs[index].setLocalLibraryItem(localLibraryItem)
+              }
+            }
+          }
         }
       }
     },
-
-    recycleComponent(component) {
-      const type = component.componentType || 'book'
-      
-      if (!this.componentPool.has(type)) {
-        this.componentPool.set(type, [])
+    async loadPage(page) {
+      if (!this.currentLibraryId) {
+        console.error('[LazyBookshelf] loadPage current library id not set')
+        return
       }
-      
-      const pool = this.componentPool.get(type)
-      if (pool.length < this.maxPoolSize) {
-        component.reset?.() // Reset component state
-        pool.push(component)
+      this.pagesLoaded[page] = true
+      await this.fetchEntities(page)
+    },
+    mountEntites(fromIndex, toIndex) {
+      for (let i = fromIndex; i < toIndex; i++) {
+        if (!this.entityIndexesMounted.includes(i)) {
+          this.cardsHelpers.mountEntityCard(i)
+        }
+      }
+    },
+    handleScroll(scrollTop) {
+      this.currScrollTop = scrollTop
+      var firstShelfIndex = Math.floor(scrollTop / this.shelfHeight)
+      var lastShelfIndex = Math.ceil((scrollTop + this.bookshelfHeight) / this.shelfHeight)
+      lastShelfIndex = Math.min(this.totalShelves - 1, lastShelfIndex)
+
+      var firstBookIndex = firstShelfIndex * this.entitiesPerShelf
+      var lastBookIndex = lastShelfIndex * this.entitiesPerShelf + this.entitiesPerShelf
+      lastBookIndex = Math.min(this.totalEntities, lastBookIndex)
+
+      var firstBookPage = Math.floor(firstBookIndex / this.booksPerFetch)
+      var lastBookPage = Math.floor(lastBookIndex / this.booksPerFetch)
+      if (!this.pagesLoaded[firstBookPage]) {
+        console.log('Must load next batch', firstBookPage, 'book index', firstBookIndex)
+        this.loadPage(firstBookPage)
+      }
+      if (!this.pagesLoaded[lastBookPage]) {
+        console.log('Must load last next batch', lastBookPage, 'book index', lastBookIndex)
+        this.loadPage(lastBookPage)
+      }
+
+      // Remove entities out of view
+      this.entityIndexesMounted = this.entityIndexesMounted.filter((_index) => {
+        if (_index < firstBookIndex || _index >= lastBookIndex) {
+          var el = document.getElementById(`book-card-${_index}`)
+          if (el) el.remove()
+          return false
+        }
+        return true
+      })
+      this.mountEntites(firstBookIndex, lastBookIndex)
+    },
+    destroyEntityComponents() {
+      for (const key in this.entityComponentRefs) {
+        if (this.entityComponentRefs[key] && this.entityComponentRefs[key].destroy) {
+          this.entityComponentRefs[key].destroy()
+        }
+      }
+    },
+    setDownloads() {
+      if (this.entityName === 'books') {
+        this.entities = []
+        // TOOD: Sort and filter here
+        this.totalEntities = this.entities.length
+        this.totalShelves = Math.ceil(this.totalEntities / this.entitiesPerShelf)
       } else {
-        component.$destroy?.()
+        // TODO: Support offline series and collections
+        this.entities = []
+        this.totalEntities = 0
+        this.totalShelves = 0
+      }
+      this.$eventBus.$emit('bookshelf-total-entities', this.totalEntities)
+    },
+    async resetEntities() {
+      if (this.isFetchingEntities) {
+        this.pendingReset = true
+        return
+      }
+      this.destroyEntityComponents()
+      this.entityIndexesMounted = []
+      this.entityComponentRefs = {}
+      this.pagesLoaded = {}
+      this.entities = []
+      this.totalShelves = 0
+      this.totalEntities = 0
+      this.currentPage = 0
+      this.initialized = false
+
+      this.initSizeData()
+      if (this.user) {
+        await this.loadPage(0)
+        var lastBookIndex = Math.min(this.totalEntities, this.shelvesPerPage * this.entitiesPerShelf)
+        this.mountEntites(0, lastBookIndex)
+      } else {
+        // Local only
       }
     },
-
-    async loadInitialData() {
-      try {
-        // Get total count first
-        this.totalEntities = await this.getTotalEntityCount()
-        
-        // Load first chunk
-        await this.loadChunk(0)
-        
-        this.initialized = true
-        this.calculateVisibleRange()
-        this.updateVisibleItems()
-        
-      } catch (error) {
-        console.error('Failed to load initial data:', error)
+    remountEntities() {
+      // Remount when an entity is removed
+      for (const key in this.entityComponentRefs) {
+        if (this.entityComponentRefs[key]) {
+          this.entityComponentRefs[key].destroy()
+        }
       }
-    },
-
-    async getTotalEntityCount() {
-      const response = await this.$api.getLibraryItemCount({
-        libraryId: this.currentLibraryId
+      this.entityComponentRefs = {}
+      this.entityIndexesMounted.forEach((i) => {
+        this.cardsHelpers.mountEntityCard(i)
       })
-      return response.count || 0
     },
+    initSizeData() {
+      var bookshelf = document.getElementById('bookshelf')
+      if (!bookshelf) {
+        console.error('Failed to init size data')
+        return
+      }
+      var entitiesPerShelfBefore = this.entitiesPerShelf
 
-    onItemLoaded(index) {
-      // Handle item load completion if needed
-      this.$emit('item-loaded', index)
+      var { clientHeight, clientWidth } = bookshelf
+      this.bookshelfHeight = clientHeight
+      this.bookshelfWidth = clientWidth
+      this.entitiesPerShelf = Math.max(1, this.showBookshelfListView ? 1 : Math.floor((this.bookshelfWidth - 16) / this.totalEntityCardWidth))
+      this.shelvesPerPage = Math.ceil(this.bookshelfHeight / this.shelfHeight) + 2
+      this.bookshelfMarginLeft = (this.bookshelfWidth - this.entitiesPerShelf * this.totalEntityCardWidth) / 2
+
+      const entitiesPerPage = this.shelvesPerPage * this.entitiesPerShelf
+      this.booksPerFetch = Math.ceil(entitiesPerPage / 20) * 20 // Round up to the nearest 20
+
+      if (this.totalEntities) {
+        this.totalShelves = Math.ceil(this.totalEntities / this.entitiesPerShelf)
+      }
+      return entitiesPerShelfBefore < this.entitiesPerShelf // Books per shelf has changed
     },
+    async init() {
+      if (this.isFirstInit) return
+      if (!this.user) {
+        // Offline support not available
+        await this.resetEntities()
+        this.$eventBus.$emit('bookshelf-total-entities', 0)
+        return
+      }
 
-    cleanup() {
-      // Cancel all active requests
-      for (const [key, cancelToken] of this.cancelTokens) {
-        cancelToken.cancel?.()
+      this.localLibraryItems = await this.$db.getLocalLibraryItems(this.currentLibraryMediaType)
+      console.log('Local library items loaded for lazy bookshelf', this.localLibraryItems.length)
+
+      this.isFirstInit = true
+      this.initSizeData()
+      await this.loadPage(0)
+      var lastBookIndex = Math.min(this.totalEntities, this.shelvesPerPage * this.entitiesPerShelf)
+      this.mountEntites(0, lastBookIndex)
+
+      // Set last scroll position for this bookshelf page
+      if (this.$store.state.lastBookshelfScrollData[this.page] && window['bookshelf-wrapper']) {
+        const { path, scrollTop } = this.$store.state.lastBookshelfScrollData[this.page]
+        if (path === this.routeFullPath) {
+          // Exact path match with query so use scroll position
+          window['bookshelf-wrapper'].scrollTop = scrollTop
+        }
       }
-      this.cancelTokens.clear()
-      this.activeRequests.clear()
-      
-      // Destroy all pooled components
-      for (const [type, pool] of this.componentPool) {
-        pool.forEach(component => component.$destroy?.())
+    },
+    scroll(e) {
+      if (!e || !e.target) return
+      if (!this.user) return
+      var { scrollTop } = e.target
+      this.handleScroll(scrollTop)
+    },
+    buildSearchParams() {
+      if (this.page === 'search' || this.page === 'collections') {
+        return ''
+      } else if (this.page === 'series') {
+        // Sort by name ascending
+        let searchParams = new URLSearchParams()
+        searchParams.set('sort', 'name')
+        searchParams.set('desc', 0)
+        return searchParams.toString()
       }
-      this.componentPool.clear()
-      
-      // Cleanup resize observer
-      if (this.resizeObserver) {
-        this.resizeObserver.disconnect()
+
+      let searchParams = new URLSearchParams()
+      if (this.page === 'series-books') {
+        searchParams.set('filter', `series.${this.$encode(this.seriesId)}`)
+        if (this.collapseBookSeries) {
+          searchParams.set('collapseseries', 1)
+        }
+      } else {
+        if (this.filterBy && this.filterBy !== 'all') {
+          searchParams.set('filter', this.filterBy)
+        }
+        if (this.orderBy) {
+          searchParams.set('sort', this.orderBy)
+          searchParams.set('desc', this.orderDesc ? 1 : 0)
+        }
+        if (this.collapseSeries) {
+          searchParams.set('collapseseries', 1)
+        }
       }
+      return searchParams.toString()
+    },
+    checkUpdateSearchParams() {
+      const newSearchParams = this.buildSearchParams()
+      let currentQueryString = window.location.search
+      if (currentQueryString && currentQueryString.startsWith('?')) currentQueryString = currentQueryString.slice(1)
+
+      if (newSearchParams === '' && !currentQueryString) {
+        return false
+      }
+      if (newSearchParams !== this.currentSFQueryString || newSearchParams !== currentQueryString) {
+        const queryString = newSearchParams ? `?${newSearchParams}` : ''
+        let newurl = window.location.protocol + '//' + window.location.host + window.location.pathname + queryString
+        window.history.replaceState({ path: newurl }, '', newurl)
+
+        this.routeFullPath = window.location.pathname + (window.location.search || '') // Update for saving scroll position
+        return true
+      }
+
+      return false
+    },
+    settingsUpdated(settings) {
+      const wasUpdated = this.checkUpdateSearchParams()
+      if (wasUpdated) {
+        this.resetEntities()
+      }
+    },
+    libraryChanged() {
+      if (this.currentLibraryMediaType !== 'book' && (this.page === 'series' || this.page === 'collections' || this.page === 'series-books')) {
+        this.$router.replace('/bookshelf')
+        return
+      }
+
+      if (this.hasFilter) {
+        this.clearFilter()
+      } else {
+        this.resetEntities()
+      }
+    },
+    libraryItemAdded(libraryItem) {
+      console.log('libraryItem added', libraryItem)
+      // TODO: Check if item would be on this shelf
+      this.resetEntities()
+    },
+    libraryItemUpdated(libraryItem) {
+      console.log('Item updated', libraryItem)
+      if (this.entityName === 'books' || this.entityName === 'series-books') {
+        var indexOf = this.entities.findIndex((ent) => ent && ent.id === libraryItem.id)
+        if (indexOf >= 0) {
+          this.entities[indexOf] = libraryItem
+          if (this.entityComponentRefs[indexOf]) {
+            this.entityComponentRefs[indexOf].setEntity(libraryItem)
+
+            if (this.isBookEntity) {
+              var localLibraryItem = this.localLibraryItems.find((lli) => lli.libraryItemId == libraryItem.id)
+              if (localLibraryItem) {
+                this.entityComponentRefs[indexOf].setLocalLibraryItem(localLibraryItem)
+              }
+            }
+          }
+        }
+      }
+    },
+    libraryItemRemoved(libraryItem) {
+      if (this.entityName === 'books' || this.entityName === 'series-books') {
+        var indexOf = this.entities.findIndex((ent) => ent && ent.id === libraryItem.id)
+        if (indexOf >= 0) {
+          this.entities = this.entities.filter((ent) => ent.id !== libraryItem.id)
+          this.totalEntities = this.entities.length
+          this.$eventBus.$emit('bookshelf-total-entities', this.totalEntities)
+          this.executeRebuild()
+        }
+      }
+    },
+    libraryItemsAdded(libraryItems) {
+      console.log('items added', libraryItems)
+      // TODO: Check if item would be on this shelf
+      this.resetEntities()
+    },
+    libraryItemsUpdated(libraryItems) {
+      libraryItems.forEach((ab) => {
+        this.libraryItemUpdated(ab)
+      })
+    },
+    screenOrientationChange() {
+      setTimeout(() => {
+        console.log('LazyBookshelf Screen orientation change')
+        this.resetEntities()
+      }, 50)
+    },
+    initListeners() {
+      const bookshelf = document.getElementById('bookshelf-wrapper')
+      if (bookshelf) {
+        bookshelf.addEventListener('scroll', this.scroll)
+      }
+
+      this.$eventBus.$on('library-changed', this.libraryChanged)
+      this.$eventBus.$on('user-settings', this.settingsUpdated)
+
+      this.$socket.$on('item_updated', this.libraryItemUpdated)
+      this.$socket.$on('item_added', this.libraryItemAdded)
+      this.$socket.$on('item_removed', this.libraryItemRemoved)
+      this.$socket.$on('items_updated', this.libraryItemsUpdated)
+      this.$socket.$on('items_added', this.libraryItemsAdded)
+
+      if (screen.orientation) {
+        // Not available on ios
+        screen.orientation.addEventListener('change', this.screenOrientationChange)
+      } else {
+        document.addEventListener('orientationchange', this.screenOrientationChange)
+      }
+    },
+    removeListeners() {
+      const bookshelf = document.getElementById('bookshelf-wrapper')
+      if (bookshelf) {
+        bookshelf.removeEventListener('scroll', this.scroll)
+      }
+
+      this.$eventBus.$off('library-changed', this.libraryChanged)
+      this.$eventBus.$off('user-settings', this.settingsUpdated)
+
+      this.$socket.$off('item_updated', this.libraryItemUpdated)
+      this.$socket.$off('item_added', this.libraryItemAdded)
+      this.$socket.$off('item_removed', this.libraryItemRemoved)
+      this.$socket.$off('items_updated', this.libraryItemsUpdated)
+      this.$socket.$off('items_added', this.libraryItemsAdded)
+
+      if (screen.orientation) {
+        // Not available on ios
+        screen.orientation.removeEventListener('change', this.screenOrientationChange)
+      } else {
+        document.removeEventListener('orientationchange', this.screenOrientationChange)
+      }
+    }
+  },
+  updated() {
+    this.routeFullPath = window.location.pathname + (window.location.search || '')
+  },
+  mounted() {
+    this.routeFullPath = window.location.pathname + (window.location.search || '')
+
+    this.init()
+    this.initListeners()
+  },
+  beforeDestroy() {
+    this.removeListeners()
+
+    // Set bookshelf scroll position for specific bookshelf page and query
+    if (window['bookshelf-wrapper']) {
+      this.$store.commit('setLastBookshelfScrollData', { scrollTop: window['bookshelf-wrapper'].scrollTop || 0, path: this.routeFullPath, name: this.page })
     }
   }
 }
 </script>
-
-<style scoped>
-.virtual-scroll-container {
-  overflow: hidden;
-}
-
-.loading-indicator {
-  position: absolute;
-  left: 50%;
-  transform: translateX(-50%);
-  padding: 10px;
-  background: rgba(0, 0, 0, 0.8);
-  color: white;
-  border-radius: 4px;
-  z-index: 100;
-}
-
-.loading-top {
-  top: 10px;
-}
-
-.loading-bottom {
-  bottom: 10px;
-}
-</style>

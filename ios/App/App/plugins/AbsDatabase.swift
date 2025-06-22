@@ -45,7 +45,11 @@ public class AbsDatabase: CAPPlugin, CAPBridgedPlugin {
         CAPPluginMethod(name: "syncLocalSessionsWithServer", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "updateLocalMediaProgressFinished", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "updateDeviceSettings", returnType: CAPPluginReturnPromise),
-        CAPPluginMethod(name: "updateLocalEbookProgress", returnType: CAPPluginReturnPromise)
+        CAPPluginMethod(name: "updateLocalEbookProgress", returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "syncLibraryMetadata", returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "getLibraryMetadata", returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "searchLibraryMetadata", returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "getLibrarySyncProgress", returnType: CAPPluginReturnPromise)
     ]
     
     private let logger = AppLogger(category: "AbsDatabase")
@@ -314,5 +318,14 @@ public class AbsDatabase: CAPPlugin, CAPBridgedPlugin {
             call.resolve(["error": "Failed to update ebook progress"])
             return
         }
+    }
+    
+    @objc func getLibrarySyncProgress(_ call: CAPPluginCall) {
+        // Return empty progress - metadata sync not implemented
+        call.resolve([
+            "synced": 0,
+            "total": 0,
+            "percentage": 0
+        ])
     }
 }

@@ -393,7 +393,7 @@ class AudioPlayer: NSObject {
         
         // Schedule a timer on the main queue to adjust the volume.
         DispatchQueue.runOnMainQueue { [weak self] in
-            var timer = Timer.scheduledTimer(withTimeInterval: TimeInterval(interval), repeats: true) { t in
+            _ = Timer.scheduledTimer(withTimeInterval: TimeInterval(interval), repeats: true) { t in
                 guard let self = self else {
                     t.invalidate()
                     return

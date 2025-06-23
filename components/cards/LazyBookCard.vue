@@ -1,5 +1,5 @@
 <template>
-  <div ref="card" :id="`book-card-${index}`" :style="{ minWidth: width + 'px', maxWidth: width + 'px', height: height + 'px' }" class="rounded-sm z-10 bg-primary cursor-pointer box-shadow-book" @click="clickCard">
+  <div ref="card" :style="{ minWidth: width + 'px', maxWidth: width + 'px', height: height + 'px' }" class="rounded-sm z-10 bg-primary cursor-pointer box-shadow-book" @click="clickCard">
     <!-- When cover image does not fill -->
     <div v-show="showCoverBg" class="absolute top-0 left-0 w-full h-full overflow-hidden rounded-sm bg-primary">
       <div class="absolute cover-bg" ref="coverBg" />
@@ -140,8 +140,12 @@ export default {
   watch: {
     bookMount: {
       handler(newVal) {
-        if (newVal) {
-          this.libraryItem = newVal
+        try {
+          if (newVal) {
+            this.libraryItem = newVal
+          }
+        } catch (error) {
+          console.error('[LazyBookCard] bookMount watcher error:', error.message || error, error.stack)
         }
       }
     }
@@ -169,11 +173,16 @@ export default {
       return '/book_placeholder.jpg'
     },
     bookCoverSrc() {
-      if (this.isLocal) {
-        if (this.libraryItem.coverContentUrl) return Capacitor.convertFileSrc(this.libraryItem.coverContentUrl)
+      try {
+        if (this.isLocal) {
+          if (this.libraryItem && this.libraryItem.coverContentUrl) return Capacitor.convertFileSrc(this.libraryItem.coverContentUrl)
+          return this.placeholderUrl
+        }
+        return this.store?.getters['globals/getLibraryItemCoverSrc'](this._libraryItem, this.placeholderUrl) || this.placeholderUrl
+      } catch (error) {
+        console.error('[LazyBookCard] bookCoverSrc error:', error.message || error)
         return this.placeholderUrl
       }
-      return this.$store.getters['globals/getLibraryItemCoverSrc'](this._libraryItem, this.placeholderUrl)
     },
     libraryItemId() {
       return this._libraryItem.id
@@ -196,7 +205,7 @@ export default {
       return this._libraryItem.numEpisodesIncomplete || 0
     },
     processingBatch() {
-      return this.$store.state.processingBatch
+      return this.store?.state.processingBatch || false
     },
     booksInSeries() {
       // Only added to audiobook object when collapseSeries is enabled
@@ -289,13 +298,13 @@ export default {
     episodeProgress() {
       // Only used on home page currently listening podcast shelf
       if (!this.recentEpisode) return null
-      if (this.isLocal) return this.$store.getters['globals/getLocalMediaProgressById'](this.libraryItemId, this.recentEpisode.id)
-      return this.$store.getters['user/getUserMediaProgress'](this.libraryItemId, this.recentEpisode.id)
+      if (this.isLocal) return this.store?.getters['globals/getLocalMediaProgressById'](this.libraryItemId, this.recentEpisode.id) || null
+      return this.store?.getters['user/getUserMediaProgress'](this.libraryItemId, this.recentEpisode.id) || null
     },
     userProgress() {
       if (this.recentEpisode) return this.episodeProgress || null
-      if (this.isLocal) return this.$store.getters['globals/getLocalMediaProgressById'](this.libraryItemId)
-      return this.$store.getters['user/getUserMediaProgress'](this.libraryItemId)
+      if (this.isLocal) return this.store?.getters['globals/getLocalMediaProgressById'](this.libraryItemId) || null
+      return this.store?.getters['user/getUserMediaProgress'](this.libraryItemId) || null
     },
     useEBookProgress() {
       if (!this.userProgress || this.userProgress.progress) return false
@@ -321,17 +330,17 @@ export default {
       return this.localLibraryItem.media.episodes.find((ep) => ep.serverEpisodeId === this.recentEpisode.id)
     },
     isStreaming() {
-      return this.$store.getters['getIsMediaStreaming'](this.libraryItemId, this.recentEpisode?.id)
+      return this.store?.getters['getIsMediaStreaming'](this.libraryItemId, this.recentEpisode?.id) || false
     },
     streamIsPlaying() {
-      return this.$store.state.playerIsPlaying && this.isStreaming
+      return this.store?.state.playerIsPlaying && this.isStreaming
     },
     playerIsStartingPlayback() {
       // Play has been pressed and waiting for native play response
-      return this.$store.state.playerIsStartingPlayback
+      return this.store?.state.playerIsStartingPlayback || false
     },
     playerIsStartingForThisMedia() {
-      const mediaId = this.$store.state.playerStartingPlaybackMediaId
+      const mediaId = this.store?.state.playerStartingPlaybackMediaId
       return mediaId === this.recentEpisode?.id
     },
     isMissing() {
@@ -353,16 +362,16 @@ export default {
       return classes
     },
     store() {
-      return this.$store || this.$nuxt.$store
+      return this.$store || this.$nuxt?.$store || this.$parent?.$store
     },
     userCanUpdate() {
-      return this.$store.getters['user/getUserCanUpdate']
+      return this.store?.getters['user/getUserCanUpdate'] || false
     },
     userCanDelete() {
-      return this.$store.getters['user/getUserCanDelete']
+      return this.store?.getters['user/getUserCanDelete'] || false
     },
     userCanDownload() {
-      return this.$store.getters['user/getUserCanDownload']
+      return this.store?.getters['user/getUserCanDownload'] || false
     },
     titleFontSize() {
       return 0.75 * this.sizeMultiplier
@@ -464,7 +473,7 @@ export default {
         return
       }
 
-      this.$store.commit('setPlayerIsStartingPlayback', this.recentEpisode.id)
+      this.store?.commit('setPlayerIsStartingPlayback', this.recentEpisode.id)
       if (this.localEpisode) {
         // Play episode locally
         eventBus.$emit('play-item', {
@@ -502,22 +511,22 @@ export default {
     },
     showEditModalTracks() {
       // More menu func
-      this.$store.commit('showEditModalOnTab', { libraryItem: this.libraryItem, tab: 'tracks' })
+      this.store?.commit('showEditModalOnTab', { libraryItem: this.libraryItem, tab: 'tracks' })
     },
     showEditModalMatch() {
       // More menu func
-      this.$store.commit('showEditModalOnTab', { libraryItem: this.libraryItem, tab: 'match' })
+      this.store?.commit('showEditModalOnTab', { libraryItem: this.libraryItem, tab: 'match' })
     },
     showEditModalDownload() {
       // More menu func
-      this.$store.commit('showEditModalOnTab', { libraryItem: this.libraryItem, tab: 'download' })
+      this.store?.commit('showEditModalOnTab', { libraryItem: this.libraryItem, tab: 'download' })
     },
     openCollections() {
-      this.$store.commit('setSelectedLibraryItem', this.libraryItem)
-      this.$store.commit('globals/setShowUserCollectionsModal', true)
+      this.store?.commit('setSelectedLibraryItem', this.libraryItem)
+      this.store?.commit('globals/setShowUserCollectionsModal', true)
     },
     clickReadEBook() {
-      this.$store.commit('showEReader', this.libraryItem)
+      this.store?.commit('showEReader', this.libraryItem)
     },
     selectBtnClick() {
       if (this.processingBatch) return
@@ -536,8 +545,12 @@ export default {
       }
     },
     setCoverBg() {
-      if (this.$refs.coverBg) {
-        this.$refs.coverBg.style.backgroundImage = `url("${this.bookCoverSrc}")`
+      try {
+        if (this.$refs.coverBg) {
+          this.$refs.coverBg.style.backgroundImage = `url("${this.bookCoverSrc}")`
+        }
+      } catch (error) {
+        console.error('[ERROR] setCoverBg failed:', error.message, error.stack)
       }
     },
     imageLoaded() {
@@ -551,7 +564,18 @@ export default {
         // If image aspect ratio is <= 1.45 or >= 1.75 then use cover bg, otherwise stretch to fit
         if (arDiff > 0.15) {
           this.showCoverBg = true
-          this.$nextTick(this.setCoverBg)
+          try {
+            if (this.$nextTick) {
+              this.$nextTick(this.setCoverBg)
+            } else {
+              // Fallback if $nextTick is not available
+              setTimeout(() => this.setCoverBg(), 0)
+            }
+          } catch (error) {
+            console.error('[ERROR] $nextTick failed:', error.message)
+            // Fallback to direct call
+            this.setCoverBg()
+          }
         } else {
           this.showCoverBg = false
         }
@@ -559,12 +583,17 @@ export default {
     }
   },
   mounted() {
-    if (this.bookMount) {
-      this.setEntity(this.bookMount)
+    try {
+      console.log('[LazyBookCard] Component mounted, index:', this.index, 'bookMount:', !!this.bookMount)
+      if (this.bookMount) {
+        this.setEntity(this.bookMount)
 
-      if (this.bookMount.localLibraryItem) {
-        this.setLocalLibraryItem(this.bookMount.localLibraryItem)
+        if (this.bookMount.localLibraryItem) {
+          this.setLocalLibraryItem(this.bookMount.localLibraryItem)
+        }
       }
+    } catch (error) {
+      console.error('[LazyBookCard] mounted error:', error.message || error, error.stack)
     }
   }
 }

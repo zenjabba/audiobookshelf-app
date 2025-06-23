@@ -1,7 +1,7 @@
 <template>
   <div id="bookshelf" ref="bookshelf" class="w-full max-w-full h-full overflow-y-auto">
     <div v-if="!initialized && user" class="w-full py-16 text-center text-xl">Loading library...</div>
-    <template v-for="shelf in Math.min(totalShelves, shelvesPerPage + 2)">
+    <template v-for="shelf in totalShelves">
       <div :key="shelf" class="w-full px-2 relative" :class="showBookshelfListView || altViewEnabled ? '' : 'bookshelfRow'" :id="`shelf-${shelf - 1}`" :style="{ height: shelfHeight + 'px', minHeight: shelfHeight + 'px' }">
         <div v-if="!showBookshelfListView && !altViewEnabled" class="w-full absolute bottom-0 left-0 z-30 bookshelfDivider" style="min-height: 16px" :class="`h-${shelfDividerHeightIndex}`" />
         <div v-else-if="showBookshelfListView" class="flex border-t border-white border-opacity-10" />

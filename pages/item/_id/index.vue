@@ -100,8 +100,8 @@
           <div v-if="series?.length" class="text-fg-muted uppercase text-sm">{{ $strings.LabelSeries }}</div>
           <div v-if="series?.length" class="text-sm">
             <template v-for="(series, index) in seriesList">
-              <nuxt-link :key="series.id" :to="`/bookshelf/series/${series.id}`" class="underline whitespace-nowrap">{{ series.text }}</nuxt-link
-              ><span :key="`${series.id}-comma`" v-if="index < seriesList.length - 1">, </span>
+              <nuxt-link :key="series.id" :to="`/bookshelf/library?filter=series.${$encode(series.name)}`" class="underline whitespace-nowrap">{{ series.text }}</nuxt-link>
+              <span :key="`${series.id}-comma`" v-if="index < seriesList.length - 1">, </span>
             </template>
           </div>
 

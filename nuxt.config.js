@@ -15,7 +15,7 @@ export default {
   },
 
   head: {
-    title: 'Audiobookshelf',
+    title: 'Datahorders',
     htmlAttrs: {
       lang: 'en'
     },

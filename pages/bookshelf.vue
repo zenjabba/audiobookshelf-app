@@ -2,7 +2,7 @@
   <div class="w-full h-full">
     <home-bookshelf-nav-bar />
     <home-bookshelf-toolbar v-show="!hideToolbar" />
-    <div id="bookshelf-wrapper" class="main-content overflow-y-auto overflow-x-hidden relative" :class="hideToolbar ? 'no-toolbar' : ''">
+    <div id="bookshelf-wrapper" class="main-content overflow-hidden relative" :class="hideToolbar ? 'no-toolbar' : ''">
       <nuxt-child />
     </div>
   </div>

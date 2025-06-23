@@ -192,21 +192,25 @@ export default {
         this.resetEntities()
         return
       }
-      if (payload && payload.results) {
+      if (payload) {
         console.log('Received payload', payload)
-        console.log('[LazyBookshelf] Page:', page, 'Start index:', startIndex, 'Results count:', payload.results.length)
+        // Handle different response structures for different entity types
+        const results = payload.results || payload.series || payload.collections || []
+        const total = payload.total !== undefined ? payload.total : results.length
+        
+        console.log('[LazyBookshelf] Page:', page, 'Start index:', startIndex, 'Results count:', results.length)
         if (!this.initialized) {
           this.initialized = true
-          this.totalEntities = payload.total
+          this.totalEntities = total
           this.totalShelves = Math.ceil(this.totalEntities / this.entitiesPerShelf)
           this.entities = new Array(this.totalEntities)
           this.$eventBus.$emit('bookshelf-total-entities', this.totalEntities)
           console.log('[LazyBookshelf] Initialized - Total entities:', this.totalEntities, 'Total shelves:', this.totalShelves, 'Entities per shelf:', this.entitiesPerShelf)
         }
 
-        for (let i = 0; i < payload.results.length; i++) {
+        for (let i = 0; i < results.length; i++) {
           const index = i + startIndex
-          this.entities[index] = payload.results[i]
+          this.entities[index] = results[i]
           if (this.entityComponentRefs[index]) {
             this.entityComponentRefs[index].setEntity(this.entities[index])
 
@@ -240,11 +244,11 @@ export default {
     },
     handleScroll(scrollTop) {
       this.currScrollTop = scrollTop
-      var firstShelfIndex = Math.floor(scrollTop / this.shelfHeight)
+      var firstShelfIndex = Math.max(0, Math.floor(scrollTop / this.shelfHeight))
       var lastShelfIndex = Math.ceil((scrollTop + this.bookshelfHeight) / this.shelfHeight)
       lastShelfIndex = Math.min(this.totalShelves - 1, lastShelfIndex)
 
-      var firstBookIndex = firstShelfIndex * this.entitiesPerShelf
+      var firstBookIndex = Math.max(0, firstShelfIndex * this.entitiesPerShelf)
       var lastBookIndex = lastShelfIndex * this.entitiesPerShelf + this.entitiesPerShelf
       lastBookIndex = Math.min(this.totalEntities, lastBookIndex)
 
@@ -423,6 +427,8 @@ export default {
         let searchParams = new URLSearchParams()
         searchParams.set('sort', 'name')
         searchParams.set('desc', 0)
+        // Request series with minimal data for better performance
+        searchParams.set('minified', 1)
         return searchParams.toString()
       }
 

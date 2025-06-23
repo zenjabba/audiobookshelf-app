@@ -2,7 +2,13 @@
   <div ref="card" :id="`series-card-${index}`" :style="{ width: width + 'px', height: height + 'px' }" class="rounded-sm cursor-pointer z-30" @click="clickCard">
     <div class="absolute top-0 left-0 w-full box-shadow-book shadow-height" />
     <div class="w-full h-full bg-primary relative rounded overflow-hidden">
-      <covers-group-cover v-if="series" ref="cover" :id="seriesId" :name="title" :book-items="books" :width="width" :height="height" :book-cover-aspect-ratio="bookCoverAspectRatio" />
+      <covers-group-cover v-if="series && books.length" ref="cover" :id="seriesId" :name="title" :book-items="books" :width="width" :height="height" :book-cover-aspect-ratio="bookCoverAspectRatio" />
+      <div v-else-if="series" class="absolute inset-0 flex items-center justify-center p-4 bg-gradient-to-br from-gray-700 to-gray-900">
+        <div class="text-center">
+          <p class="text-gray-200 font-semibold" :style="{ fontSize: labelFontSize + 'rem' }">{{ title }}</p>
+          <p v-if="series.numBooks" class="text-gray-400 text-xs mt-1">{{ series.numBooks }} {{ series.numBooks === 1 ? 'book' : 'books' }}</p>
+        </div>
+      </div>
     </div>
 
     <div v-if="seriesPercentInProgress > 0" class="absolute bottom-0 left-0 h-1 max-w-full z-10 rounded-b w-full box-shadow-progressbar" :class="isSeriesFinished ? 'bg-success' : 'bg-yellow-400'" :style="{ width: seriesPercentInProgress * 100 + '%' }" />
@@ -50,9 +56,11 @@ export default {
       return this.width / 240
     },
     title() {
-      return this.series ? this.series.name : ''
+      return this.series ? this.series.name : 'No title'
     },
     books() {
+      // For series listing, we may not have books array populated
+      // The cover component should handle empty arrays gracefully
       return this.series ? this.series.books || [] : []
     },
     seriesBookProgress() {
@@ -77,7 +85,7 @@ export default {
       return this.books.length === this.seriesBooksFinished.length
     },
     store() {
-      return this.$store || this.$nuxt.$store
+      return this.$store || this.$nuxt?.$store || this.$parent?.$store
     },
     currentLibraryId() {
       return this.store.state.libraries.currentLibraryId

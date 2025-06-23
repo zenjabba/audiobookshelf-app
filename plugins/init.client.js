@@ -197,16 +197,35 @@ Vue.prototype.$encode = encode
 const decode = (text) => Buffer.from(decodeURIComponent(text), 'base64').toString()
 Vue.prototype.$decode = decode
 
+// Global Vue error handler
+Vue.config.errorHandler = function (err, vm, info) {
+  console.error('[Vue Error]', {
+    message: err.message || 'Unknown error',
+    stack: err.stack,
+    component: vm?.$options?.name || 'Unknown',
+    info: info,
+    error: err
+  })
+}
+
+// Unhandled promise rejection handler
+window.addEventListener('unhandledrejection', event => {
+  console.error('[Unhandled Promise Rejection]', {
+    reason: event.reason,
+    promise: event.promise
+  })
+})
+
 Vue.prototype.$setOrientationLock = (orientationLockSetting) => {
   if (!window.screen?.orientation) return
 
   if (orientationLockSetting == 'PORTRAIT') {
     window.screen.orientation.lock?.('portrait').catch((error) => {
-      console.error(error)
+      console.error('[OrientationLock] Failed to lock portrait:', error.message || error)
     })
   } else if (orientationLockSetting == 'LANDSCAPE') {
     window.screen.orientation.lock?.('landscape').catch((error) => {
-      console.error(error)
+      console.error('[OrientationLock] Failed to lock landscape:', error.message || error)
     })
   } else {
     window.screen.orientation.unlock?.()

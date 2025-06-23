@@ -67,9 +67,19 @@ export default {
 
       // var _this = this
       try {
+        console.log('[DEBUG] Creating container for card', index, 'shelfOffsetX:', shelfOffsetX, 'shelfOffsetY:', shelfOffsetY)
+        // Create a container div for the component
+        var containerEl = document.createElement('div')
+        containerEl.id = `book-card-${index}`
+        containerEl.style.position = 'absolute'
+        containerEl.style.transform = `translate3d(${shelfOffsetX}px, ${shelfOffsetY}px, 0px)`
+        
+        console.log('[DEBUG] Creating Vue instance for card', index)
         var instance = new ComponentClass({
+          parent: this,
           propsData: props,
           created() {
+            console.log('[DEBUG] Vue instance created for card', index)
             // this.$on('edit', (entity) => {
             //   if (_this.editEntity) _this.editEntity(entity)
             // })
@@ -80,39 +90,64 @@ export default {
         })
         this.entityComponentRefs[index] = instance
         
-        // Mount without element first
+        console.log('[DEBUG] Appending container to shelf for card', index)
+        // Append container to shelf first
+        shelfEl.appendChild(containerEl)
+        
+        console.log('[DEBUG] Mounting Vue instance for card', index)
+        // Mount the instance
         instance.$mount()
         
-        // Wait for next tick to ensure DOM is ready
-        Vue.nextTick(() => {
+        console.log('[DEBUG] Setting position styles on mounted element for card', index)
+        // Apply positioning to the mounted element
+        if (instance.$el) {
+          instance.$el.id = `book-card-${index}`
+          instance.$el.style.position = 'absolute'
+          instance.$el.style.transform = `translate3d(${shelfOffsetX}px, ${shelfOffsetY}px, 0px)`
+        }
+        
+        // Replace container with the actual component element
+        containerEl.parentNode.replaceChild(instance.$el, containerEl)
+        
+        console.log('[DEBUG] Vue instance mounted, checking $el for card', index, '- $el exists:', !!instance.$el)
+        
+        if (!instance.$el) {
+          console.error('[ERROR] No $el after mounting for card', index)
+        }
+        
+        if (entity) {
+          console.log('[DEBUG] Setting entity for card', index)
           try {
-            if (!instance.$el) {
-              console.error('[ERROR] Component mounted but has no $el after nextTick', index)
-              return
-            }
-            
-            instance.$el.style.transform = `translate3d(${shelfOffsetX}px, ${shelfOffsetY}px, 0px)`
-            instance.$el.classList.add('absolute', 'top-0', 'left-0')
-            shelfEl.appendChild(instance.$el)
+            instance.setEntity(entity)
+          } catch (setEntityError) {
+            console.error('[ERROR] Failed to setEntity for card', index, setEntityError.message, setEntityError.stack)
+          }
 
-            if (entity) {
-              instance.setEntity(entity)
-
-              if (this.isBookEntity && !entity.isLocal) {
-                var localLibraryItem = this.localLibraryItems.find(lli => lli.libraryItemId == entity.id)
-                if (localLibraryItem) {
-                  instance.setLocalLibraryItem(localLibraryItem)
-                }
+          if (this.isBookEntity && !entity.isLocal) {
+            var localLibraryItem = this.localLibraryItems.find(lli => lli.libraryItemId == entity.id)
+            if (localLibraryItem) {
+              console.log('[DEBUG] Setting local library item for card', index)
+              try {
+                instance.setLocalLibraryItem(localLibraryItem)
+              } catch (setLocalError) {
+                console.error('[ERROR] Failed to setLocalLibraryItem for card', index, setLocalError.message, setLocalError.stack)
               }
             }
-          } catch (innerError) {
-            console.error('[ERROR] Failed inside nextTick for card:', index, innerError.message, innerError.stack)
           }
-        }).catch(err => {
-          console.error('[ERROR] Vue.nextTick promise rejected:', index, err)
-        })
+        }
+        console.log('[DEBUG] Successfully mounted card', index)
       } catch (error) {
-        console.error('[ERROR] Failed to mount entity card:', index, error.message, error.stack)
+        console.error('[ERROR] Failed to mount entity card:', index)
+        console.error('[ERROR] Error message:', error.message || 'No message')
+        console.error('[ERROR] Error stack:', error.stack || 'No stack trace')
+        console.error('[ERROR] Error type:', typeof error)
+        console.error('[ERROR] Error constructor:', error.constructor?.name || 'Unknown')
+        console.error('[ERROR] Error keys:', Object.keys(error || {}))
+        try {
+          console.error('[ERROR] Error stringified:', JSON.stringify(error))
+        } catch (stringifyError) {
+          console.error('[ERROR] Could not stringify error:', stringifyError.message)
+        }
       }
     },
   }

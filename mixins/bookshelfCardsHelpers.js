@@ -4,6 +4,7 @@ import LazyListBookCard from '@/components/cards/LazyListBookCard'
 import LazySeriesCard from '@/components/cards/LazySeriesCard'
 import LazyCollectionCard from '@/components/cards/LazyCollectionCard'
 import LazyPlaylistCard from '@/components/cards/LazyPlaylistCard'
+import LazyAuthorCard from '@/components/cards/LazyAuthorCard'
 
 export default {
   data() {
@@ -18,13 +19,15 @@ export default {
       if (this.entityName === 'series') return Vue.extend(LazySeriesCard)
       if (this.entityName === 'collections') return Vue.extend(LazyCollectionCard)
       if (this.entityName === 'playlists') return Vue.extend(LazyPlaylistCard)
+      if (this.entityName === 'authors') return Vue.extend(LazyAuthorCard)
       if (this.showBookshelfListView) return Vue.extend(LazyListBookCard)
       return Vue.extend(LazyBookCard)
     },
     async mountEntityCard(index) {
       var shelf = Math.floor(index / this.entitiesPerShelf)
       var shelfEl = document.getElementById(`shelf-${shelf}`)
-      console.log('[mountEntityCard] Mounting card', index, 'on shelf', shelf, 'shelfEl exists:', !!shelfEl)
+      console.log('[mountEntityCard] Mounting card', index, 'on shelf', shelf, 'shelfEl exists:', !!shelfEl, 'entitiesPerShelf:', this.entitiesPerShelf)
+      
       if (!shelfEl) {
         console.error('[ERROR] mount entity card invalid shelf', shelf, 'book index', index)
         console.error('[ERROR] Available shelves:', Array.from(document.querySelectorAll('[id^="shelf-"]')).map(el => el.id))

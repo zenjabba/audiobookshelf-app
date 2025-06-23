@@ -161,9 +161,9 @@ export default {
       // Set library - Use last library if set and available fallback to default user library
       const lastLibraryId = await this.$localStore.getLastLibraryId()
       if (lastLibraryId && (!user.librariesAccessible.length || user.librariesAccessible.includes(lastLibraryId))) {
-        this.$store.commit('libraries/setCurrentLibrary', lastLibraryId)
+        await this.$store.dispatch('libraries/setCurrentLibraryWithSync', lastLibraryId)
       } else if (userDefaultLibraryId) {
-        this.$store.commit('libraries/setCurrentLibrary', userDefaultLibraryId)
+        await this.$store.dispatch('libraries/setCurrentLibraryWithSync', userDefaultLibraryId)
       }
       const serverConnectionConfig = await this.$db.setServerConnectionConfig(serverConfig)
 

@@ -34,7 +34,7 @@ export const getters = {
 }
 
 export const actions = {
-  fetch({ state, commit, dispatch, rootState }, libraryId) {
+  async fetch({ state, commit, dispatch, rootState }, libraryId) {
     if (!rootState.user || !rootState.user.user) {
       console.error('libraries/fetch - User not set')
       return false
@@ -42,7 +42,7 @@ export const actions = {
 
     return this.$nativeHttp
       .get(`/api/libraries/${libraryId}?include=filterdata`)
-      .then((data) => {
+      .then(async (data) => {
         const library = data.library
         const filterData = data.filterdata
         const issues = data.issues || 0
@@ -54,7 +54,10 @@ export const actions = {
         commit('setLibraryIssues', issues)
         commit('setLibraryFilterData', filterData)
         commit('setNumUserPlaylists', numUserPlaylists)
-        commit('setCurrentLibrary', libraryId)
+        
+        // Use the new action to set library and start sync if needed
+        await dispatch('setCurrentLibraryWithSync', libraryId)
+        
         return data
       })
       .catch((error) => {
@@ -63,7 +66,7 @@ export const actions = {
       })
   },
   // Return true if calling load
-  load({ state, commit, rootState }) {
+  async load({ state, commit, dispatch, rootState }) {
     if (!rootState.user || !rootState.user.user) {
       console.error('libraries/load - User not set')
       return false
@@ -78,13 +81,13 @@ export const actions = {
 
     return this.$nativeHttp
       .get(`/api/libraries`)
-      .then((data) => {
+      .then(async (data) => {
         // TODO: Server release 2.2.9 changed response to an object. Remove after a few releases
         const libraries = data.libraries || data
 
         // Set current library if not already set or was not returned in results
         if (libraries.length && (!state.currentLibraryId || !libraries.find(li => li.id == state.currentLibraryId))) {
-          commit('setCurrentLibrary', libraries[0].id)
+          await dispatch('setCurrentLibraryWithSync', libraries[0].id)
         }
 
         commit('set', libraries)
@@ -97,7 +100,31 @@ export const actions = {
         return false
       })
   },
-
+  
+  // Set current library and start metadata sync if needed
+  async setCurrentLibraryWithSync({ commit, rootState }, libraryId) {
+    commit('setCurrentLibrary', libraryId)
+    
+    // Start metadata sync for large libraries
+    if (libraryId && rootState.networkConnected) {
+      try {
+        const response = await this.$nativeHttp.get(
+          `/api/libraries/${libraryId}/stats`,
+          { connectTimeout: 5000 }
+        )
+        
+        if (response && response.totalItems > 5000) {
+          console.log(`[libraries] Starting metadata sync for large library (${response.totalItems} items)`)
+          this.$db.syncLibraryMetadata(libraryId, false).catch(error => {
+            console.error('[libraries] Background sync failed:', error)
+          })
+        }
+      } catch (error) {
+        // Ignore errors, sync is optional optimization
+        console.log('[libraries] Could not check library size for sync')
+      }
+    }
+  }
 }
 
 export const mutations = {

@@ -1,5 +1,8 @@
 <template>
-  <bookshelf-lazy-bookshelf page="books" />
+  <div class="w-full h-full min-h-full relative">
+    <!-- Always use lazy bookshelf which has grid view and virtual scrolling -->
+    <bookshelf-lazy-bookshelf page="books" />
+  </div>
 </template>
 
 <script>

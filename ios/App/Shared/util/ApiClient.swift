@@ -142,6 +142,7 @@ class ApiClient {
                 case .failure(let error):
                     logger.error("api request to \(endpoint) failed")
                     print(error)
+                    callback?(nil)
             }
         }
     }

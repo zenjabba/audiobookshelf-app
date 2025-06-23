@@ -99,6 +99,23 @@ class DbService {
   getMediaItemHistory(mediaId) {
     return AbsDatabase.getMediaItemHistory({ mediaId })
   }
+
+  // Library Metadata Management
+  syncLibraryMetadata(libraryId, forceRefresh = false) {
+    return AbsDatabase.syncLibraryMetadata({ libraryId, forceRefresh })
+  }
+
+  getLibraryMetadata(libraryId, offset = 0, limit = 100) {
+    return AbsDatabase.getLibraryMetadata({ libraryId, offset, limit })
+  }
+
+  searchLibraryMetadata(libraryId, query) {
+    return AbsDatabase.searchLibraryMetadata({ libraryId, query })
+  }
+
+  getLibrarySyncProgress(libraryId) {
+    return AbsDatabase.getLibrarySyncProgress({ libraryId })
+  }
 }
 
 export default ({ app, store }, inject) => {

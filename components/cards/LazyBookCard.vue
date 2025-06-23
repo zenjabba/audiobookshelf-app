@@ -173,7 +173,7 @@ export default {
         if (this.libraryItem.coverContentUrl) return Capacitor.convertFileSrc(this.libraryItem.coverContentUrl)
         return this.placeholderUrl
       }
-      return this.store.getters['globals/getLibraryItemCoverSrc'](this._libraryItem, this.placeholderUrl)
+      return this.$store.getters['globals/getLibraryItemCoverSrc'](this._libraryItem, this.placeholderUrl)
     },
     libraryItemId() {
       return this._libraryItem.id
@@ -196,7 +196,7 @@ export default {
       return this._libraryItem.numEpisodesIncomplete || 0
     },
     processingBatch() {
-      return this.store.state.processingBatch
+      return this.$store.state.processingBatch
     },
     booksInSeries() {
       // Only added to audiobook object when collapseSeries is enabled
@@ -289,13 +289,13 @@ export default {
     episodeProgress() {
       // Only used on home page currently listening podcast shelf
       if (!this.recentEpisode) return null
-      if (this.isLocal) return this.store.getters['globals/getLocalMediaProgressById'](this.libraryItemId, this.recentEpisode.id)
-      return this.store.getters['user/getUserMediaProgress'](this.libraryItemId, this.recentEpisode.id)
+      if (this.isLocal) return this.$store.getters['globals/getLocalMediaProgressById'](this.libraryItemId, this.recentEpisode.id)
+      return this.$store.getters['user/getUserMediaProgress'](this.libraryItemId, this.recentEpisode.id)
     },
     userProgress() {
       if (this.recentEpisode) return this.episodeProgress || null
-      if (this.isLocal) return this.store.getters['globals/getLocalMediaProgressById'](this.libraryItemId)
-      return this.store.getters['user/getUserMediaProgress'](this.libraryItemId)
+      if (this.isLocal) return this.$store.getters['globals/getLocalMediaProgressById'](this.libraryItemId)
+      return this.$store.getters['user/getUserMediaProgress'](this.libraryItemId)
     },
     useEBookProgress() {
       if (!this.userProgress || this.userProgress.progress) return false
@@ -321,17 +321,17 @@ export default {
       return this.localLibraryItem.media.episodes.find((ep) => ep.serverEpisodeId === this.recentEpisode.id)
     },
     isStreaming() {
-      return this.store.getters['getIsMediaStreaming'](this.libraryItemId, this.recentEpisode?.id)
+      return this.$store.getters['getIsMediaStreaming'](this.libraryItemId, this.recentEpisode?.id)
     },
     streamIsPlaying() {
-      return this.store.state.playerIsPlaying && this.isStreaming
+      return this.$store.state.playerIsPlaying && this.isStreaming
     },
     playerIsStartingPlayback() {
       // Play has been pressed and waiting for native play response
-      return this.store.state.playerIsStartingPlayback
+      return this.$store.state.playerIsStartingPlayback
     },
     playerIsStartingForThisMedia() {
-      const mediaId = this.store.state.playerStartingPlaybackMediaId
+      const mediaId = this.$store.state.playerStartingPlaybackMediaId
       return mediaId === this.recentEpisode?.id
     },
     isMissing() {
@@ -356,13 +356,13 @@ export default {
       return this.$store || this.$nuxt.$store
     },
     userCanUpdate() {
-      return this.store.getters['user/getUserCanUpdate']
+      return this.$store.getters['user/getUserCanUpdate']
     },
     userCanDelete() {
-      return this.store.getters['user/getUserCanDelete']
+      return this.$store.getters['user/getUserCanDelete']
     },
     userCanDownload() {
-      return this.store.getters['user/getUserCanDownload']
+      return this.$store.getters['user/getUserCanDownload']
     },
     titleFontSize() {
       return 0.75 * this.sizeMultiplier
@@ -464,7 +464,7 @@ export default {
         return
       }
 
-      this.store.commit('setPlayerIsStartingPlayback', this.recentEpisode.id)
+      this.$store.commit('setPlayerIsStartingPlayback', this.recentEpisode.id)
       if (this.localEpisode) {
         // Play episode locally
         eventBus.$emit('play-item', {
@@ -502,22 +502,22 @@ export default {
     },
     showEditModalTracks() {
       // More menu func
-      this.store.commit('showEditModalOnTab', { libraryItem: this.libraryItem, tab: 'tracks' })
+      this.$store.commit('showEditModalOnTab', { libraryItem: this.libraryItem, tab: 'tracks' })
     },
     showEditModalMatch() {
       // More menu func
-      this.store.commit('showEditModalOnTab', { libraryItem: this.libraryItem, tab: 'match' })
+      this.$store.commit('showEditModalOnTab', { libraryItem: this.libraryItem, tab: 'match' })
     },
     showEditModalDownload() {
       // More menu func
-      this.store.commit('showEditModalOnTab', { libraryItem: this.libraryItem, tab: 'download' })
+      this.$store.commit('showEditModalOnTab', { libraryItem: this.libraryItem, tab: 'download' })
     },
     openCollections() {
-      this.store.commit('setSelectedLibraryItem', this.libraryItem)
-      this.store.commit('globals/setShowUserCollectionsModal', true)
+      this.$store.commit('setSelectedLibraryItem', this.libraryItem)
+      this.$store.commit('globals/setShowUserCollectionsModal', true)
     },
     clickReadEBook() {
-      this.store.commit('showEReader', this.libraryItem)
+      this.$store.commit('showEReader', this.libraryItem)
     },
     selectBtnClick() {
       if (this.processingBatch) return

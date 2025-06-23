@@ -48,7 +48,10 @@ export default {
       lastServerFetchLibraryId: null,
       lastLocalFetch: 0,
       localLibraryItems: [],
-      isLoading: false
+      isLoading: false,
+      syncProgress: null,
+      syncInterval: null,
+      librarySize: 0
     }
   },
   watch: {
@@ -236,7 +239,15 @@ export default {
       console.log('[categories] Local shelves set', this.shelves.length, this.lastLocalFetch)
 
       if (isConnectedToServerWithInternet) {
-        const categories = await this.$nativeHttp.get(`/api/libraries/${this.currentLibraryId}/personalized?minified=1&include=rssfeed,numEpisodesIncomplete`, { connectTimeout: 10000 }).catch((error) => {
+        // Check library size first
+        await this.checkLibrarySize()
+        
+        // For large libraries, start metadata sync
+        if (this.librarySize > 5000) {
+          await this.startMetadataSync()
+        }
+        
+        const categories = await this.$nativeHttp.get(`/api/libraries/${this.currentLibraryId}/personalized?minified=1&include=rssfeed,numEpisodesIncomplete&limit=100`, { connectTimeout: 10000 }).catch((error) => {
           console.error('[categories] Failed to fetch categories', error)
           return []
         })
@@ -325,6 +336,59 @@ export default {
     },
     removeListeners() {
       this.$eventBus.$off('library-changed', this.libraryChanged)
+    },
+    async checkLibrarySize() {
+      try {
+        // First check sync progress
+        const syncProgress = await this.$db.getLibrarySyncProgress(this.currentLibraryId)
+        if (syncProgress && syncProgress.total > 0) {
+          this.librarySize = syncProgress.total
+          console.log(`[categories] Library size from sync: ${syncProgress.total}`)
+          return
+        }
+
+        // Fallback to stats endpoint
+        const response = await this.$nativeHttp.get(
+          `/api/libraries/${this.currentLibraryId}/stats`,
+          { connectTimeout: 5000 }
+        ).catch(() => null)
+
+        if (response && response.totalItems) {
+          this.librarySize = response.totalItems
+          console.log(`[categories] Library size: ${response.totalItems}`)
+        }
+      } catch (error) {
+        console.error('[categories] Failed to check library size:', error)
+      }
+    },
+    async startMetadataSync() {
+      try {
+        console.log('[categories] Starting metadata sync for large library')
+        
+        // Start sync in background
+        await this.$db.syncLibraryMetadata(this.currentLibraryId, false)
+        
+        // Show sync progress in console (could add UI indicator if needed)
+        this.syncInterval = setInterval(async () => {
+          const progress = await this.$db.getLibrarySyncProgress(this.currentLibraryId)
+          this.syncProgress = {
+            synced: progress.synced,
+            total: progress.total,
+            percentage: progress.percentage,
+            isComplete: progress.synced >= progress.total
+          }
+          
+          console.log(`[categories] Sync progress: ${progress.synced}/${progress.total} (${progress.percentage.toFixed(1)}%)`)
+
+          if (this.syncProgress.isComplete) {
+            clearInterval(this.syncInterval)
+            this.syncInterval = null
+            console.log('[categories] Metadata sync complete')
+          }
+        }, 5000) // Check every 5 seconds
+      } catch (error) {
+        console.error('[categories] Failed to start metadata sync:', error)
+      }
     }
   },
   async mounted() {
@@ -339,6 +403,9 @@ export default {
   },
   beforeDestroy() {
     this.removeListeners()
+    if (this.syncInterval) {
+      clearInterval(this.syncInterval)
+    }
   }
 }
 </script>

@@ -24,10 +24,18 @@ export default {
     async mountEntityCard(index) {
       var shelf = Math.floor(index / this.entitiesPerShelf)
       var shelfEl = document.getElementById(`shelf-${shelf}`)
+      console.log('[mountEntityCard] Mounting card', index, 'on shelf', shelf, 'shelfEl exists:', !!shelfEl)
       if (!shelfEl) {
-        console.error('mount entity card invalid shelf', shelf, 'book index', index)
+        console.error('[ERROR] mount entity card invalid shelf', shelf, 'book index', index)
+        console.error('[ERROR] Available shelves:', Array.from(document.querySelectorAll('[id^="shelf-"]')).map(el => el.id))
         return
       }
+      const entity = this.entities[index]
+      if (!entity) {
+        console.error('[ERROR] No entity at index', index, 'Total entities:', this.entities.length)
+        return
+      }
+      console.log('[mountEntityCard] Entity at index', index, ':', entity.media?.metadata?.title || 'No title')
       this.entityIndexesMounted.push(index)
       if (this.entityComponentRefs[index]) {
         var bookComponent = this.entityComponentRefs[index]
@@ -58,34 +66,53 @@ export default {
       }
 
       // var _this = this
-      var instance = new ComponentClass({
-        propsData: props,
-        created() {
-          // this.$on('edit', (entity) => {
-          //   if (_this.editEntity) _this.editEntity(entity)
-          // })
-          // this.$on('select', (entity) => {
-          //   if (_this.selectEntity) _this.selectEntity(entity)
-          // })
-        }
-      })
-      this.entityComponentRefs[index] = instance
-      instance.$mount()
-      instance.$el.style.transform = `translate3d(${shelfOffsetX}px, ${shelfOffsetY}px, 0px)`
-
-      instance.$el.classList.add('absolute', 'top-0', 'left-0')
-      shelfEl.appendChild(instance.$el)
-
-      if (this.entities[index]) {
-        var entity = this.entities[index]
-        instance.setEntity(entity)
-
-        if (this.isBookEntity && !entity.isLocal) {
-          var localLibraryItem = this.localLibraryItems.find(lli => lli.libraryItemId == entity.id)
-          if (localLibraryItem) {
-            instance.setLocalLibraryItem(localLibraryItem)
+      try {
+        var instance = new ComponentClass({
+          propsData: props,
+          created() {
+            // this.$on('edit', (entity) => {
+            //   if (_this.editEntity) _this.editEntity(entity)
+            // })
+            // this.$on('select', (entity) => {
+            //   if (_this.selectEntity) _this.selectEntity(entity)
+            // })
           }
-        }
+        })
+        this.entityComponentRefs[index] = instance
+        
+        // Mount without element first
+        instance.$mount()
+        
+        // Wait for next tick to ensure DOM is ready
+        Vue.nextTick(() => {
+          try {
+            if (!instance.$el) {
+              console.error('[ERROR] Component mounted but has no $el after nextTick', index)
+              return
+            }
+            
+            instance.$el.style.transform = `translate3d(${shelfOffsetX}px, ${shelfOffsetY}px, 0px)`
+            instance.$el.classList.add('absolute', 'top-0', 'left-0')
+            shelfEl.appendChild(instance.$el)
+
+            if (entity) {
+              instance.setEntity(entity)
+
+              if (this.isBookEntity && !entity.isLocal) {
+                var localLibraryItem = this.localLibraryItems.find(lli => lli.libraryItemId == entity.id)
+                if (localLibraryItem) {
+                  instance.setLocalLibraryItem(localLibraryItem)
+                }
+              }
+            }
+          } catch (innerError) {
+            console.error('[ERROR] Failed inside nextTick for card:', index, innerError.message, innerError.stack)
+          }
+        }).catch(err => {
+          console.error('[ERROR] Vue.nextTick promise rejected:', index, err)
+        })
+      } catch (error) {
+        console.error('[ERROR] Failed to mount entity card:', index, error.message, error.stack)
       }
     },
   }

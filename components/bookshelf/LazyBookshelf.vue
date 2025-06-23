@@ -1,7 +1,8 @@
 <template>
-  <div id="bookshelf" class="w-full max-w-full h-full">
+  <div id="bookshelf" ref="bookshelf" class="w-full max-w-full h-full overflow-y-auto">
+    <div v-if="!initialized && user" class="w-full py-16 text-center text-xl">Loading library...</div>
     <template v-for="shelf in Math.min(totalShelves, shelvesPerPage + 2)">
-      <div :key="shelf" class="w-full px-2 relative" :class="showBookshelfListView || altViewEnabled ? '' : 'bookshelfRow'" :id="`shelf-${shelf - 1}`" :style="{ height: shelfHeight + 'px' }">
+      <div :key="shelf" class="w-full px-2 relative" :class="showBookshelfListView || altViewEnabled ? '' : 'bookshelfRow'" :id="`shelf-${shelf - 1}`" :style="{ height: shelfHeight + 'px', minHeight: shelfHeight + 'px' }">
         <div v-if="!showBookshelfListView && !altViewEnabled" class="w-full absolute bottom-0 left-0 z-30 bookshelfDivider" style="min-height: 16px" :class="`h-${shelfDividerHeightIndex}`" />
         <div v-else-if="showBookshelfListView" class="flex border-t border-white border-opacity-10" />
       </div>
@@ -193,12 +194,14 @@ export default {
       }
       if (payload && payload.results) {
         console.log('Received payload', payload)
+        console.log('[LazyBookshelf] Page:', page, 'Start index:', startIndex, 'Results count:', payload.results.length)
         if (!this.initialized) {
           this.initialized = true
           this.totalEntities = payload.total
           this.totalShelves = Math.ceil(this.totalEntities / this.entitiesPerShelf)
           this.entities = new Array(this.totalEntities)
           this.$eventBus.$emit('bookshelf-total-entities', this.totalEntities)
+          console.log('[LazyBookshelf] Initialized - Total entities:', this.totalEntities, 'Total shelves:', this.totalShelves, 'Entities per shelf:', this.entitiesPerShelf)
         }
 
         for (let i = 0; i < payload.results.length; i++) {
@@ -226,11 +229,14 @@ export default {
       await this.fetchEntities(page)
     },
     mountEntites(fromIndex, toIndex) {
+      console.log('[LazyBookshelf] Mounting entities from', fromIndex, 'to', toIndex, 'Entities available:', this.entities.filter(e => e).length)
       for (let i = fromIndex; i < toIndex; i++) {
         if (!this.entityIndexesMounted.includes(i)) {
+          console.log('[LazyBookshelf] Mounting card at index', i, 'Entity exists:', !!this.entities[i])
           this.cardsHelpers.mountEntityCard(i)
         }
       }
+      console.log('[LazyBookshelf] Mounted entities count:', this.entityIndexesMounted.length)
     },
     handleScroll(scrollTop) {
       this.currScrollTop = scrollTop
@@ -330,6 +336,15 @@ export default {
       var entitiesPerShelfBefore = this.entitiesPerShelf
 
       var { clientHeight, clientWidth } = bookshelf
+      
+      // Check if we have valid dimensions
+      if (!clientHeight || !clientWidth) {
+        console.error('[LazyBookshelf] Invalid bookshelf dimensions:', clientHeight, clientWidth)
+        // Try again after a delay
+        setTimeout(() => this.initSizeData(), 100)
+        return
+      }
+      
       this.bookshelfHeight = clientHeight
       this.bookshelfWidth = clientWidth
       this.entitiesPerShelf = Math.max(1, this.showBookshelfListView ? 1 : Math.floor((this.bookshelfWidth - 16) / this.totalEntityCardWidth))
@@ -338,6 +353,10 @@ export default {
 
       const entitiesPerPage = this.shelvesPerPage * this.entitiesPerShelf
       this.booksPerFetch = Math.ceil(entitiesPerPage / 20) * 20 // Round up to the nearest 20
+
+      console.log('[LazyBookshelf] Size data - Height:', this.bookshelfHeight, 'Width:', this.bookshelfWidth, 'Entities per shelf:', this.entitiesPerShelf, 'Shelves per page:', this.shelvesPerPage)
+      console.log('[LazyBookshelf] Additional info - Shelf height:', this.shelfHeight, 'Entity width:', this.entityWidth, 'Entity height:', this.entityHeight, 'Total entity card width:', this.totalEntityCardWidth)
+      console.log('[LazyBookshelf] Book dimensions - Width:', this.bookWidth, 'Height:', this.bookHeight, 'Aspect ratio:', this.bookCoverAspectRatio)
 
       if (this.totalEntities) {
         this.totalShelves = Math.ceil(this.totalEntities / this.entitiesPerShelf)
@@ -357,17 +376,36 @@ export default {
       console.log('Local library items loaded for lazy bookshelf', this.localLibraryItems.length)
 
       this.isFirstInit = true
-      this.initSizeData()
+      
+      // Initialize size data - retry if dimensions are not ready
+      const maxRetries = 10
+      let retries = 0
+      while (retries < maxRetries) {
+        this.initSizeData()
+        if (this.bookshelfHeight > 0 && this.bookshelfWidth > 0) {
+          break
+        }
+        await new Promise(resolve => setTimeout(resolve, 100))
+        retries++
+      }
+      
+      if (this.bookshelfHeight === 0 || this.bookshelfWidth === 0) {
+        console.error('[LazyBookshelf] Failed to get valid bookshelf dimensions after retries')
+        return
+      }
+      
       await this.loadPage(0)
       var lastBookIndex = Math.min(this.totalEntities, this.shelvesPerPage * this.entitiesPerShelf)
+      console.log('[LazyBookshelf] init - Total entities:', this.totalEntities, 'Last book index:', lastBookIndex, 'Total shelves:', this.totalShelves)
+      console.log('[LazyBookshelf] About to mount entities. Shelves per page:', this.shelvesPerPage, 'Entities per shelf:', this.entitiesPerShelf)
       this.mountEntites(0, lastBookIndex)
 
       // Set last scroll position for this bookshelf page
-      if (this.$store.state.lastBookshelfScrollData[this.page] && window['bookshelf-wrapper']) {
+      if (this.$store.state.lastBookshelfScrollData[this.page] && this.$refs.bookshelf) {
         const { path, scrollTop } = this.$store.state.lastBookshelfScrollData[this.page]
         if (path === this.routeFullPath) {
           // Exact path match with query so use scroll position
-          window['bookshelf-wrapper'].scrollTop = scrollTop
+          this.$refs.bookshelf.scrollTop = scrollTop
         }
       }
     },
@@ -497,7 +535,7 @@ export default {
       }, 50)
     },
     initListeners() {
-      const bookshelf = document.getElementById('bookshelf-wrapper')
+      const bookshelf = document.getElementById('bookshelf')
       if (bookshelf) {
         bookshelf.addEventListener('scroll', this.scroll)
       }
@@ -519,7 +557,7 @@ export default {
       }
     },
     removeListeners() {
-      const bookshelf = document.getElementById('bookshelf-wrapper')
+      const bookshelf = document.getElementById('bookshelf')
       if (bookshelf) {
         bookshelf.removeEventListener('scroll', this.scroll)
       }
@@ -547,15 +585,23 @@ export default {
   mounted() {
     this.routeFullPath = window.location.pathname + (window.location.search || '')
 
-    this.init()
-    this.initListeners()
+    // Add a small delay to ensure the DOM is ready
+    this.$nextTick(() => {
+      console.log('[LazyBookshelf] Component mounted. Bookshelf element:', this.$refs.bookshelf)
+      if (this.$refs.bookshelf) {
+        const rect = this.$refs.bookshelf.getBoundingClientRect()
+        console.log('[LazyBookshelf] Bookshelf dimensions:', rect.width, 'x', rect.height)
+      }
+      this.init()
+      this.initListeners()
+    })
   },
   beforeDestroy() {
     this.removeListeners()
 
     // Set bookshelf scroll position for specific bookshelf page and query
-    if (window['bookshelf-wrapper']) {
-      this.$store.commit('setLastBookshelfScrollData', { scrollTop: window['bookshelf-wrapper'].scrollTop || 0, path: this.routeFullPath, name: this.page })
+    if (this.$refs.bookshelf) {
+      this.$store.commit('setLastBookshelfScrollData', { scrollTop: this.$refs.bookshelf.scrollTop || 0, path: this.routeFullPath, name: this.page })
     }
   }
 }

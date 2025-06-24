@@ -7,7 +7,6 @@
 
 import Foundation
 import Alamofire
-import RealmSwift
 
 class ApiClient {
     private static let logger = AppLogger(category: "ApiClient")
@@ -231,42 +230,6 @@ class ApiClient {
                 }
             }
             
-            // Sync streaming media progress by updating LibraryItem userMediaProgress
-            let realm = try Realm()
-            for mediaProgress in currentUser.mediaProgress {
-                // Skip if this is local media (already handled above)
-                let hasLocalProgress = localMediaProgressList.contains { lmp in
-                    if (lmp.episodeId != nil) {
-                        return lmp.episodeId == mediaProgress.episodeId
-                    } else {
-                        return lmp.libraryItemId == mediaProgress.libraryItemId
-                    }
-                }
-                if hasLocalProgress { continue }
-                
-                // Update LibraryItem's userMediaProgress for streaming content
-                if let libraryItem = realm.object(ofType: LibraryItem.self, forPrimaryKey: mediaProgress.libraryItemId) {
-                    try libraryItem.update {
-                        if libraryItem.userMediaProgress == nil {
-                            libraryItem.userMediaProgress = MediaProgress()
-                        }
-                        libraryItem.userMediaProgress?.id = mediaProgress.id
-                        libraryItem.userMediaProgress?.userId = mediaProgress.userId
-                        libraryItem.userMediaProgress?.libraryItemId = mediaProgress.libraryItemId
-                        libraryItem.userMediaProgress?.episodeId = mediaProgress.episodeId
-                        libraryItem.userMediaProgress?.duration = mediaProgress.duration
-                        libraryItem.userMediaProgress?.progress = mediaProgress.progress
-                        libraryItem.userMediaProgress?.currentTime = mediaProgress.currentTime
-                        libraryItem.userMediaProgress?.isFinished = mediaProgress.isFinished
-                        libraryItem.userMediaProgress?.ebookLocation = mediaProgress.ebookLocation
-                        libraryItem.userMediaProgress?.ebookProgress = mediaProgress.ebookProgress
-                        libraryItem.userMediaProgress?.lastUpdate = mediaProgress.lastUpdate
-                        libraryItem.userMediaProgress?.startedAt = mediaProgress.startedAt
-                        libraryItem.userMediaProgress?.finishedAt = mediaProgress.finishedAt
-                    }
-                    logger.log("syncLocalSessionsWithServer: Updated streaming media progress for libraryItem \(mediaProgress.libraryItemId)")
-                }
-            }
             
             // Send saved playback sessions to server and remove them from db
             let playbackSessions = Database.shared.getAllPlaybackSessions().filter {

@@ -14,8 +14,23 @@ class Database {
     }()
     
     private let logger = AppLogger(category: "Database")
+    private let realmConfig: Realm.Configuration
 
-    private init() {}
+    private init() {
+        // Configure Realm with migration
+        self.realmConfig = Realm.Configuration(
+            schemaVersion: 2, // Increment this when making schema changes
+            migrationBlock: { migration, oldSchemaVersion in
+                if oldSchemaVersion < 2 {
+                    // Migration for adding primary key to LibraryItem
+                    // Realm handles adding primary key automatically
+                }
+            }
+        )
+        
+        // Set as default configuration
+        Realm.Configuration.defaultConfiguration = self.realmConfig
+    }
     
     public func setServerConnectionConfig(config: ServerConnectionConfig) {
         let config = config

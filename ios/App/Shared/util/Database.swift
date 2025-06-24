@@ -19,9 +19,9 @@ class Database {
     private init() {
         // Configure Realm with migration
         self.realmConfig = Realm.Configuration(
-            schemaVersion: 2, // Increment this when making schema changes
+            schemaVersion: 20, // Increment this when making schema changes
             migrationBlock: { migration, oldSchemaVersion in
-                if oldSchemaVersion < 2 {
+                if oldSchemaVersion < 20 {
                     // Migration for adding primary key to LibraryItem
                     // Realm handles adding primary key automatically
                 }

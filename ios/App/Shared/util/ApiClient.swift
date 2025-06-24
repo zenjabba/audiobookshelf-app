@@ -7,6 +7,7 @@
 
 import Foundation
 import Alamofire
+import RealmSwift
 
 class ApiClient {
     private static let logger = AppLogger(category: "ApiClient")
@@ -231,7 +232,7 @@ class ApiClient {
             }
             
             // Sync streaming media progress by updating LibraryItem userMediaProgress
-            let realm = try Realm(queue: nil)
+            let realm = try Realm()
             for mediaProgress in currentUser.mediaProgress {
                 // Skip if this is local media (already handled above)
                 let hasLocalProgress = localMediaProgressList.contains { lmp in

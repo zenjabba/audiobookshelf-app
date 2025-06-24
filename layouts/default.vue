@@ -337,6 +337,9 @@ export default {
         await this.attemptConnection()
       }
 
+      // Load local media progress before syncing sessions
+      await this.$store.dispatch('globals/loadLocalMediaProgress')
+      
       await this.syncLocalSessions(true)
 
       this.hasMounted = true

@@ -280,6 +280,7 @@ export default {
     onLocalMediaProgressUpdate(localMediaProgress) {
       console.log('Got local media progress update', localMediaProgress.progress, JSON.stringify(localMediaProgress))
       this.$store.commit('globals/updateLocalMediaProgress', localMediaProgress)
+      this.$eventBus.$emit('local-media-progress-updated', localMediaProgress)
     },
     onMediaPlayerChanged(data) {
       this.$store.commit('setMediaPlayer', data.value)

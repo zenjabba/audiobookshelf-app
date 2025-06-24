@@ -202,14 +202,15 @@ class ApiClient {
             }.map { $0.freeze() }
             logger.log("syncLocalSessionsWithServer: Found \(localMediaProgressList.count) local media progress for server")
             
-            if (localMediaProgressList.isEmpty) {
-                logger.log("syncLocalSessionsWithServer: No local progress to sync")
-            } else {
-                let currentUser = await ApiClient.getCurrentUser()
-                guard let currentUser = currentUser else {
-                    logger.log("syncLocalSessionsWithServer: No User")
-                    return
-                }
+            // Get current user to sync all media progress (both local and streaming)
+            let currentUser = await ApiClient.getCurrentUser()
+            guard let currentUser = currentUser else {
+                logger.log("syncLocalSessionsWithServer: No User")
+                return
+            }
+            
+            // Sync local media progress
+            if (!localMediaProgressList.isEmpty) {
                 try currentUser.mediaProgress.forEach { mediaProgress in
                     let localMediaProgress = localMediaProgressList.first { lmp in
                         if (lmp.episodeId != nil) {
@@ -226,6 +227,43 @@ class ApiClient {
                     } else if (localMediaProgress != nil) {
                         logger.log("syncLocalSessionsWithServer: Local progress for \(localMediaProgress!.id) is more recent then server progress")
                     }
+                }
+            }
+            
+            // Sync streaming media progress by updating LibraryItem userMediaProgress
+            let realm = try Realm(queue: nil)
+            for mediaProgress in currentUser.mediaProgress {
+                // Skip if this is local media (already handled above)
+                let hasLocalProgress = localMediaProgressList.contains { lmp in
+                    if (lmp.episodeId != nil) {
+                        return lmp.episodeId == mediaProgress.episodeId
+                    } else {
+                        return lmp.libraryItemId == mediaProgress.libraryItemId
+                    }
+                }
+                if hasLocalProgress { continue }
+                
+                // Update LibraryItem's userMediaProgress for streaming content
+                if let libraryItem = realm.object(ofType: LibraryItem.self, forPrimaryKey: mediaProgress.libraryItemId) {
+                    try libraryItem.update {
+                        if libraryItem.userMediaProgress == nil {
+                            libraryItem.userMediaProgress = MediaProgress()
+                        }
+                        libraryItem.userMediaProgress?.id = mediaProgress.id
+                        libraryItem.userMediaProgress?.userId = mediaProgress.userId
+                        libraryItem.userMediaProgress?.libraryItemId = mediaProgress.libraryItemId
+                        libraryItem.userMediaProgress?.episodeId = mediaProgress.episodeId
+                        libraryItem.userMediaProgress?.duration = mediaProgress.duration
+                        libraryItem.userMediaProgress?.progress = mediaProgress.progress
+                        libraryItem.userMediaProgress?.currentTime = mediaProgress.currentTime
+                        libraryItem.userMediaProgress?.isFinished = mediaProgress.isFinished
+                        libraryItem.userMediaProgress?.ebookLocation = mediaProgress.ebookLocation
+                        libraryItem.userMediaProgress?.ebookProgress = mediaProgress.ebookProgress
+                        libraryItem.userMediaProgress?.lastUpdate = mediaProgress.lastUpdate
+                        libraryItem.userMediaProgress?.startedAt = mediaProgress.startedAt
+                        libraryItem.userMediaProgress?.finishedAt = mediaProgress.finishedAt
+                    }
+                    logger.log("syncLocalSessionsWithServer: Updated streaming media progress for libraryItem \(mediaProgress.libraryItemId)")
                 }
             }
             

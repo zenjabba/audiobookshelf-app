@@ -334,13 +334,20 @@ export default {
     initListeners() {
       this.$eventBus.$on('library-changed', this.libraryChanged)
       this.$eventBus.$on('local-media-progress-updated', this.localMediaProgressUpdated)
+      this.$eventBus.$on('user_media_progress_updated', this.streamingMediaProgressUpdated)
     },
     removeListeners() {
       this.$eventBus.$off('library-changed', this.libraryChanged)
       this.$eventBus.$off('local-media-progress-updated', this.localMediaProgressUpdated)
+      this.$eventBus.$off('user_media_progress_updated', this.streamingMediaProgressUpdated)
     },
     localMediaProgressUpdated() {
       console.log('[categories] Local media progress updated, refreshing categories')
+      // Refresh categories to update Continue Listening shelves
+      this.fetchCategories()
+    },
+    streamingMediaProgressUpdated(payload) {
+      console.log('[categories] Streaming media progress updated', payload)
       // Refresh categories to update Continue Listening shelves
       this.fetchCategories()
     },

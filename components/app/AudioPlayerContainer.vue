@@ -31,6 +31,7 @@ export default {
       sleepTimeRemaining: 0,
       isAutoSleepTimer: false,
       onLocalMediaProgressUpdateListener: null,
+      onStreamingProgressUpdateListener: null,
       onSleepTimerEndedListener: null,
       onSleepTimerSetListener: null,
       onMediaPlayerChangedListener: null,
@@ -282,6 +283,23 @@ export default {
       this.$store.commit('globals/updateLocalMediaProgress', localMediaProgress)
       this.$eventBus.$emit('local-media-progress-updated', localMediaProgress)
     },
+    onStreamingProgressUpdate(progressData) {
+      console.log('Got streaming progress update', progressData)
+      // Update user media progress in Vuex store
+      const mediaProgress = {
+        id: `${progressData.libraryItemId}-${progressData.episodeId || ''}`,
+        libraryItemId: progressData.libraryItemId,
+        episodeId: progressData.episodeId || null,
+        currentTime: progressData.currentTime,
+        duration: progressData.duration,
+        progress: progressData.progress,
+        isFinished: progressData.progress >= 0.95,
+        lastUpdate: Date.now()
+      }
+      this.$store.commit('user/updateUserMediaProgress', mediaProgress)
+      // Notify bookshelf to refresh categories
+      this.$eventBus.$emit('user_media_progress_updated', { data: mediaProgress })
+    },
     onMediaPlayerChanged(data) {
       this.$store.commit('setMediaPlayer', data.value)
     },
@@ -354,6 +372,7 @@ export default {
   },
   mounted() {
     this.onLocalMediaProgressUpdateListener = AbsAudioPlayer.addListener('onLocalMediaProgressUpdate', this.onLocalMediaProgressUpdate)
+    this.onStreamingProgressUpdateListener = AbsAudioPlayer.addListener('onStreamingProgressUpdate', this.onStreamingProgressUpdate)
     this.onSleepTimerEndedListener = AbsAudioPlayer.addListener('onSleepTimerEnded', this.onSleepTimerEnded)
     this.onSleepTimerSetListener = AbsAudioPlayer.addListener('onSleepTimerSet', this.onSleepTimerSet)
     this.onMediaPlayerChangedListener = AbsAudioPlayer.addListener('onMediaPlayerChanged', this.onMediaPlayerChanged)
@@ -372,6 +391,7 @@ export default {
   },
   beforeDestroy() {
     if (this.onLocalMediaProgressUpdateListener) this.onLocalMediaProgressUpdateListener.remove()
+    if (this.onStreamingProgressUpdateListener) this.onStreamingProgressUpdateListener.remove()
     if (this.onSleepTimerEndedListener) this.onSleepTimerEndedListener.remove()
     if (this.onSleepTimerSetListener) this.onSleepTimerSetListener.remove()
     if (this.onMediaPlayerChangedListener) this.onMediaPlayerChangedListener.remove()

@@ -65,8 +65,45 @@ class PlayerProgress {
     
     private func updateLocalMediaProgressFromLocalSession() throws {
         guard let session = PlayerHandler.getPlaybackSession() else { return }
-        guard session.isLocal else { return }
         
+        // For streaming media, we need to update the LibraryItem's userMediaProgress
+        if !session.isLocal {
+            guard let libraryItemId = session.libraryItemId else { return }
+            
+            logger.log("Updating streaming media progress for session: \(session.id), libraryItemId: \(libraryItemId)")
+            
+            // Fetch the library item from the database
+            let realm = try Realm(queue: nil)
+            guard let libraryItem = realm.object(ofType: LibraryItem.self, forPrimaryKey: libraryItemId) else {
+                logger.error("Failed to find library item for streaming session: \(libraryItemId)")
+                return
+            }
+            
+            // Update or create the media progress
+            try libraryItem.update {
+                if libraryItem.userMediaProgress == nil {
+                    libraryItem.userMediaProgress = MediaProgress()
+                    libraryItem.userMediaProgress?.id = UUID().uuidString
+                    libraryItem.userMediaProgress?.userId = session.userId ?? ""
+                    libraryItem.userMediaProgress?.libraryItemId = libraryItemId
+                    libraryItem.userMediaProgress?.episodeId = session.episodeId
+                }
+                
+                libraryItem.userMediaProgress?.currentTime = session.currentTime
+                libraryItem.userMediaProgress?.duration = session.duration
+                libraryItem.userMediaProgress?.progress = session.currentTime / session.duration
+                libraryItem.userMediaProgress?.lastUpdate = Date().timeIntervalSince1970 * 1000
+                libraryItem.userMediaProgress?.isFinished = session.progress >= 0.95
+            }
+            
+            logger.log("Streaming progress saved to library item - currentTime: \(session.currentTime), progress: \(session.progress)")
+            
+            // Send the progress update notification
+            NotificationCenter.default.post(name: NSNotification.Name(PlayerEvents.localProgress.rawValue), object: nil)
+            return
+        }
+        
+        // Original code for local media
         logger.log("Updating local media progress for session: \(session.id), localMediaProgressId: \(session.localMediaProgressId ?? "nil")")
         
         let localMediaProgress = try LocalMediaProgress.fetchOrCreateLocalMediaProgress(localMediaProgressId: session.localMediaProgressId, localLibraryItemId: session.localLibraryItem?.id, localEpisodeId: session.episodeId)

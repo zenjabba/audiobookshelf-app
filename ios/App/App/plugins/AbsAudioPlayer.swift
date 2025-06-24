@@ -259,11 +259,27 @@ public class AbsAudioPlayer: CAPPlugin, CAPBridgedPlugin {
     }
 
     @objc func onLocalMediaProgressUpdate() {
-        guard let localMediaProgressId = PlayerHandler.getPlaybackSession()?.localMediaProgressId else { return }
-        guard let localMediaProgress = Database.shared.getLocalMediaProgress(localMediaProgressId: localMediaProgressId) else { return }
-        guard let progressUpdate = try? localMediaProgress.asDictionary() else { return }
-        logger.log("Sending local progress back to the UI")
-        self.notifyListeners("onLocalMediaProgressUpdate", data: progressUpdate)
+        guard let session = PlayerHandler.getPlaybackSession() else { return }
+        
+        if let localMediaProgressId = session.localMediaProgressId {
+            // Handle local media progress
+            guard let localMediaProgress = Database.shared.getLocalMediaProgress(localMediaProgressId: localMediaProgressId) else { return }
+            guard let progressUpdate = try? localMediaProgress.asDictionary() else { return }
+            logger.log("Sending local media progress back to the UI")
+            self.notifyListeners("onLocalMediaProgressUpdate", data: progressUpdate)
+        } else if !session.isLocal, let libraryItemId = session.libraryItemId {
+            // Handle streaming media progress
+            logger.log("Sending streaming progress update for libraryItemId: \(libraryItemId)")
+            let progressData: [String: Any] = [
+                "libraryItemId": libraryItemId,
+                "episodeId": session.episodeId ?? "",
+                "currentTime": session.currentTime,
+                "duration": session.duration,
+                "progress": session.progress,
+                "isStreaming": true
+            ]
+            self.notifyListeners("onStreamingProgressUpdate", data: progressData)
+        }
     }
 
     @objc func onPlaybackFailed() {

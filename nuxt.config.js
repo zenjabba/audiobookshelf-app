@@ -25,7 +25,11 @@ export default {
         src: '/libs/sortable.js'
       }
     ],
-    link: [{ rel: 'icon', type: 'image/x-icon', href: '/favicon.ico' }]
+    link: [
+      { rel: 'icon', type: 'image/x-icon', href: '/favicon.ico' },
+      // Preload icon font to prevent missing icons with large libraries
+      { rel: 'preload', href: '/fonts/absicons/absicons.woff', as: 'font', type: 'font/woff', crossorigin: 'anonymous' }
+    ]
   },
 
   css: ['@/assets/tailwind.css', '@/assets/app.css'],

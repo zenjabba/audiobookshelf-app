@@ -67,16 +67,19 @@ class PlayerProgress {
         guard let session = PlayerHandler.getPlaybackSession() else { return }
         guard session.isLocal else { return }
         
+        logger.log("Updating local media progress for session: \(session.id), localMediaProgressId: \(session.localMediaProgressId ?? "nil")")
+        
         let localMediaProgress = try LocalMediaProgress.fetchOrCreateLocalMediaProgress(localMediaProgressId: session.localMediaProgressId, localLibraryItemId: session.localLibraryItem?.id, localEpisodeId: session.episodeId)
         guard let localMediaProgress = localMediaProgress else {
             // Local media progress should have been created
             // If we're here, it means a library id is invalid
+            logger.error("Failed to create/fetch local media progress for localLibraryItemId: \(session.localLibraryItem?.id ?? "nil"), episodeId: \(session.episodeId ?? "nil")")
             return
         }
 
         try localMediaProgress.updateFromPlaybackSession(session)
         
-        logger.log("Local progress saved to the database")
+        logger.log("Local progress saved to the database - currentTime: \(localMediaProgress.currentTime), progress: \(localMediaProgress.progress)")
         
         // Send the local progress back to front-end
         NotificationCenter.default.post(name: NSNotification.Name(PlayerEvents.localProgress.rawValue), object: nil)

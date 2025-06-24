@@ -1,6 +1,6 @@
 {
   "name": "datahorders-app",
-  "version": "0.9.81.78-datahorders",
+  "version": "0.9.81.79-datahorders",
   "author": "armsby",
   "scripts": {
     "dev": "nuxt --hostname 0.0.0.0 --port 1337",

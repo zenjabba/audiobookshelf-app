@@ -333,9 +333,16 @@ export default {
     },
     initListeners() {
       this.$eventBus.$on('library-changed', this.libraryChanged)
+      this.$eventBus.$on('local-media-progress-updated', this.localMediaProgressUpdated)
     },
     removeListeners() {
       this.$eventBus.$off('library-changed', this.libraryChanged)
+      this.$eventBus.$off('local-media-progress-updated', this.localMediaProgressUpdated)
+    },
+    localMediaProgressUpdated() {
+      console.log('[categories] Local media progress updated, refreshing categories')
+      // Refresh categories to update Continue Listening shelves
+      this.fetchCategories()
     },
     async checkLibrarySize() {
       try {

@@ -1,6 +1,6 @@
 <template>
   <div :class="containerClasses" class="flex items-center justify-center">
-    <span class="abs-icons" :class="iconClass" :data-icon="iconToUse">&nbsp;</span>
+    <span class="abs-icons" :class="iconClass" :data-icon="iconToUse" :aria-label="iconToUse"></span>
   </div>
 </template>
 
@@ -72,65 +72,59 @@ export default {
   },
   methods: {},
   async mounted() {
-    // Check if Font Loading API is available and font needs loading
+    // Force immediate font rendering
+    const iconElement = this.$el.querySelector('.abs-icons')
+    if (!iconElement) return
+
+    // Check if Font Loading API is available
     if ('fonts' in document) {
       try {
         // Check if font is already loaded
         const fontLoaded = await document.fonts.check('1em absicons')
         
         if (!fontLoaded) {
-          // Try to load the font
-          await document.fonts.load('1em absicons')
+          // Create a FontFace object to ensure proper loading
+          const fontFace = new FontFace('absicons', 'url(/fonts/absicons/absicons.woff) format("woff")')
+          
+          // Load the font
+          await fontFace.load()
+          
+          // Add it to the document
+          document.fonts.add(fontFace)
+          
+          // Force re-render of the icon
+          iconElement.style.fontFamily = 'absicons'
           
           // Add a class to indicate font is loaded
-          const iconElement = this.$el.querySelector('.abs-icons')
-          if (iconElement) {
-            iconElement.classList.add('font-loaded')
-          }
+          iconElement.classList.add('font-loaded')
         }
       } catch (error) {
-        console.error('[LibraryIcon] Font loading error:', error)
+        console.warn('[LibraryIcon] Font loading API error, falling back:', error)
+        
+        // Fallback: Force font loading by creating a test element
+        const testEl = document.createElement('span')
+        testEl.style.cssText = 'position:absolute;left:-9999px;font-family:absicons;'
+        testEl.textContent = '\ue906' // database icon
+        document.body.appendChild(testEl)
+        
+        // Wait a frame and remove
+        requestAnimationFrame(() => {
+          if (testEl.parentNode) {
+            document.body.removeChild(testEl)
+          }
+          // Force re-render
+          iconElement.style.fontFamily = 'absicons'
+        })
       }
     }
     
-    // Force font load on iOS with a different approach
-    if (this.$capacitor?.platform === 'ios' || this.$capacitor?.platform === 'web') {
-      // Create a temporary element to force font loading
-      const tempEl = document.createElement('span')
-      tempEl.style.position = 'absolute'
-      tempEl.style.left = '-9999px'
-      tempEl.style.fontFamily = 'absicons'
-      tempEl.innerHTML = '&#xe906;' // database icon using HTML entity
-      document.body.appendChild(tempEl)
-      
-      // Force a reflow
-      void tempEl.offsetHeight
-      
-      // Remove after a short delay
-      setTimeout(() => {
-        if (tempEl.parentNode) {
-          document.body.removeChild(tempEl)
-        }
-      }, 100)
-    }
-    
-    // Debug font loading issues
-    if (process.env.NODE_ENV !== 'production') {
-      this.$nextTick(() => {
-        const iconElement = this.$el.querySelector('.abs-icons')
-        if (iconElement) {
-          const computedStyle = window.getComputedStyle(iconElement)
-          const fontFamily = computedStyle.fontFamily
-          if (!fontFamily.includes('absicons')) {
-            console.error('[LibraryIcon] Font not loaded correctly:', {
-              fontFamily,
-              icon: this.icon,
-              iconToUse: this.iconToUse,
-              iconClass: this.iconClass,
-              platform: this.$capacitor?.platform
-            })
-          }
-        }
+    // Additional fix for iOS/Safari
+    if (this.$capacitor?.platform === 'ios' || /Safari/.test(navigator.userAgent)) {
+      // Force a repaint to ensure icon renders
+      requestAnimationFrame(() => {
+        iconElement.style.display = 'none'
+        void iconElement.offsetHeight // Force reflow
+        iconElement.style.display = ''
       })
     }
   }
@@ -149,6 +143,12 @@ export default {
   line-height: 1;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+  /* Ensure minimum size for icon visibility */
+  min-width: 1em;
+  min-height: 1em;
+  /* Position relative for ::before positioning */
+  position: relative;
+  display: inline-block;
 }
 
 /* Icon content definitions - duplicate from absicons.css for reliability */
@@ -218,6 +218,15 @@ export default {
 
 .abs-icons.icon-heart::before {
   content: "\e9da";
+}
+
+/* Ensure icon displays even before font loads */
+.abs-icons::before {
+  display: inline-block;
+  font-style: normal;
+  font-variant: normal;
+  text-rendering: auto;
+  -webkit-font-smoothing: antialiased;
 }
 
 </style>

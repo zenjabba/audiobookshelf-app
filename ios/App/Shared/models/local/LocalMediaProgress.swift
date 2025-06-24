@@ -156,6 +156,16 @@ extension LocalMediaProgress {
             self.lastUpdate = Date().timeIntervalSince1970 * 1000
             self.isFinished = playbackSession.progress >= 0.99
             self.finishedAt = self.isFinished ? self.lastUpdate : nil
+            
+            // Update duration if not set or if it changed
+            if self.duration == 0 || self.duration != playbackSession.duration {
+                self.duration = playbackSession.duration
+            }
+            
+            // Set startedAt if this is the first time we're saving progress
+            if self.startedAt == 0 && playbackSession.currentTime > 0 {
+                self.startedAt = self.lastUpdate
+            }
         }
     }
     

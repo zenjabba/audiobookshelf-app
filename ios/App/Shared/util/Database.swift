@@ -215,8 +215,14 @@ class Database {
     public func getAllLocalMediaProgress() -> [LocalMediaProgress] {
         do {
             let realm = try Realm()
-            return Array(realm.objects(LocalMediaProgress.self))
+            let allProgress = Array(realm.objects(LocalMediaProgress.self))
+            logger.log("getAllLocalMediaProgress: Found \(allProgress.count) local media progress entries")
+            for progress in allProgress {
+                logger.log("Progress ID: \(progress.id), currentTime: \(progress.currentTime), progress: \(progress.progress)")
+            }
+            return allProgress
         } catch {
+            logger.error("getAllLocalMediaProgress error: \(error)")
             debugPrint(error)
             return []
         }

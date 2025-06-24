@@ -19,13 +19,26 @@ class Database {
     private init() {
         // Configure Realm with migration
         self.realmConfig = Realm.Configuration(
-            schemaVersion: 20, // Increment this when making schema changes
+            schemaVersion: 21, // Increment this when making schema changes
             migrationBlock: { migration, oldSchemaVersion in
-                if oldSchemaVersion < 20 {
+                if oldSchemaVersion < 21 {
                     // Migration for adding primary key to LibraryItem
-                    // Realm handles adding primary key automatically
+                    // First, we need to handle any duplicate IDs
+                    var seenIds = Set<String>()
+                    migration.enumerateObjects(ofType: LibraryItem.className()) { oldObject, newObject in
+                        guard let newObject = newObject,
+                              let id = oldObject?["id"] as? String else { return }
+                        
+                        if seenIds.contains(id) {
+                            // This is a duplicate, delete it
+                            migration.delete(newObject)
+                        } else {
+                            seenIds.insert(id)
+                        }
+                    }
                 }
-            }
+            },
+            deleteRealmIfMigrationNeeded: false
         )
         
         // Set as default configuration

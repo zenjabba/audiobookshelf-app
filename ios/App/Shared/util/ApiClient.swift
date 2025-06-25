@@ -282,7 +282,16 @@ class ApiClient {
             endpoint += "&episodeId=\(episodeId!)"
         }
         
+        logger.log("getLibraryItemWithProgress: Fetching from endpoint: \(endpoint)")
+        
         ApiClient.getResource(endpoint: endpoint, decodable: LibraryItem.self) { obj in
+            if let obj = obj {
+                logger.log("getLibraryItemWithProgress: Got library item with media type: \(obj.mediaType ?? "nil")")
+                logger.log("getLibraryItemWithProgress: Media tracks count: \(obj.media?.tracks.count ?? -1)")
+                logger.log("getLibraryItemWithProgress: Media audioFiles count: \(obj.media?.audioFiles.count ?? -1)")
+            } else {
+                logger.error("getLibraryItemWithProgress: Failed to decode library item")
+            }
             callback(obj)
         }
     }

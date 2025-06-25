@@ -46,8 +46,12 @@ class MediaType: EmbeddedObject, Codable {
         if let chapterList = try? values.decode([Chapter].self, forKey: .chapters) {
             chapters.append(objectsIn: chapterList)
         }
-        if let trackList = try? values.decode([AudioTrack].self, forKey: .tracks) {
+        do {
+            let trackList = try values.decode([AudioTrack].self, forKey: .tracks)
             tracks.append(objectsIn: trackList)
+            print("[MediaType] Successfully decoded \(trackList.count) tracks")
+        } catch {
+            print("[MediaType] Failed to decode tracks: \(error)")
         }
         size = try? values.decode(Int.self, forKey: .size)
         duration = try? values.decode(Double.self, forKey: .duration)

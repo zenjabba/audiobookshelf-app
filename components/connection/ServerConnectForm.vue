@@ -504,7 +504,8 @@ export default {
       try {
         var urlObject = new URL(url)
         if (protocolOverride) urlObject.protocol = protocolOverride
-        return urlObject.href
+        // Remove trailing slash to prevent double slashes in API calls
+        return urlObject.href.replace(/\/$/, '')
       } catch (error) {
         console.error('Invalid URL', error)
         return null
@@ -849,6 +850,20 @@ export default {
         }
       }
 
+      // Ensure user has permissions structure (some servers don't include it in login response)
+      if (!user.permissions) {
+        console.log('[ServerConnectForm] User permissions missing from login response, will be updated via socket')
+        user.permissions = {
+          download: false,
+          update: false,
+          delete: false,
+          upload: false,
+          accessAllLibraries: true,
+          accessAllTags: true,
+          accessExplicitContent: true
+        }
+      }
+      
       this.$store.commit('user/setUser', user)
       this.$store.commit('user/setServerConnectionConfig', serverConnectionConfig)
 

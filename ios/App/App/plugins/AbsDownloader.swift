@@ -237,7 +237,7 @@ public class AbsDownloader: CAPPlugin, CAPBridgedPlugin, URLSessionDownloadDeleg
         ApiClient.getLibraryItemWithProgress(libraryItemId: libraryItemId, episodeId: episodeId) { [weak self] libraryItem in
             if let libraryItem = libraryItem {
                 self?.logger.log("Got library item from server \(libraryItem.id)")
-                self?.logger.log("Media type: \(libraryItem.mediaType ?? "nil")")
+                self?.logger.log("Media type: \(libraryItem.mediaType)")
                 self?.logger.log("Tracks count: \(libraryItem.media?.tracks.count ?? 0)")
                 self?.logger.log("AudioFiles count: \(libraryItem.media?.audioFiles.count ?? 0)")
                 
@@ -251,7 +251,7 @@ public class AbsDownloader: CAPPlugin, CAPBridgedPlugin, URLSessionDownloadDeleg
                 // Log audioFile details
                 if let audioFiles = libraryItem.media?.audioFiles {
                     for (index, audioFile) in audioFiles.enumerated() {
-                        self?.logger.log("AudioFile \(index): ino=\(audioFile.ino ?? "nil"), metadata.filename=\(audioFile.metadata?.filename ?? "nil")")
+                        self?.logger.log("AudioFile \(index): ino=\(audioFile.ino), metadata.filename=\(audioFile.metadata?.filename ?? "nil")")
                     }
                 }
                 
@@ -347,8 +347,9 @@ public class AbsDownloader: CAPPlugin, CAPBridgedPlugin, URLSessionDownloadDeleg
             throw LibraryItemDownloadError.noMetadata
         }
         
-        guard let filename = metadata.filename else {
-            logger.error("Track metadata has no filename")
+        let filename = metadata.filename
+        if filename.isEmpty {
+            logger.error("Track metadata has empty filename")
             throw LibraryItemDownloadError.noMetadata
         }
         

@@ -52,7 +52,10 @@ export const getters = {
     return !!state.user?.permissions?.delete
   },
   getUserCanDownload: (state) => {
-    return !!state.user?.permissions?.download
+    // Handle both boolean and numeric permission values (gateway may return 0/1 instead of false/true)
+    const downloadPermission = state.user?.permissions?.download
+    console.log('[getUserCanDownload] download permission value:', downloadPermission, 'type:', typeof downloadPermission)
+    return downloadPermission === true || downloadPermission === 1 || downloadPermission === '1'
   }
 }
 

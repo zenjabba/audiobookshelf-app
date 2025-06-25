@@ -100,6 +100,12 @@ class ServerSocket extends EventEmitter {
 
   onInit(data) {
     console.log('[SOCKET] Initial socket data received', data)
+    
+    // Update user with full data including permissions from socket
+    if (data.user) {
+      this.$store.commit('user/setUser', data.user)
+    }
+    
     this.emit('initialized', true)
   }
 

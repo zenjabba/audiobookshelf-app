@@ -449,6 +449,19 @@ export default {
       return this.ebookFile
     },
     showDownload() {
+      console.log('[showDownload] Checking download button visibility for:', this.title)
+      console.log('[showDownload] isPodcast:', this.isPodcast)
+      console.log('[showDownload] hasLocal:', this.hasLocal)
+      console.log('[showDownload] isLocal:', this.isLocal)
+      console.log('[showDownload] localLibraryItem:', this.localLibraryItem)
+      console.log('[showDownload] user:', !!this.user)
+      console.log('[showDownload] userCanDownload:', this.userCanDownload)
+      console.log('[showDownload] user.permissions:', this.user?.permissions)
+      console.log('[showDownload] Full user object:', JSON.stringify(this.user, null, 2))
+      console.log('[showDownload] Server address:', this.$store.getters['user/getServerAddress'])
+      console.log('[showDownload] showPlay:', this.showPlay)
+      console.log('[showDownload] showRead:', this.showRead)
+      
       if (this.isPodcast || this.hasLocal) return false
       return this.user && this.userCanDownload && (this.showPlay || this.showRead)
     },
@@ -466,7 +479,12 @@ export default {
       return this.ebookFile.ebookFormat
     },
     downloadItem() {
-      return this.$store.getters['globals/getDownloadItem'](this.libraryItemId)
+      const item = this.$store.getters['globals/getDownloadItem'](this.libraryItemId)
+      if (item) {
+        console.log('[downloadItem] Found download item:', item)
+        console.log('[downloadItem] itemProgress:', item.itemProgress)
+      }
+      return item
     },
     episodes() {
       return this.media.episodes || []

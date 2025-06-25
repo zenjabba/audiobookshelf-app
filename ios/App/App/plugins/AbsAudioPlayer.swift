@@ -68,6 +68,7 @@ public class AbsAudioPlayer: CAPPlugin, CAPBridgedPlugin {
     @objc func startPlaybackSession(_ session: PlaybackSession, playWhenReady: Bool, playbackRate: Float) throws {
         guard let libraryItemId = session.libraryItemId else { throw PlayerError.libraryItemIdNotSpecified }
 
+        logger.log("startPlaybackSession called - sessionId: \(session.id), currentTime: \(session.currentTime)s, playWhenReady: \(playWhenReady)")
         self.sendPrepareMetadataEvent(itemId: libraryItemId, playWhenReady: playWhenReady)
         self.sendPlaybackSession(session: try session.asDictionary())
         PlayerHandler.startPlayback(sessionId: session.id, playWhenReady: playWhenReady, playbackRate: playbackRate)
@@ -98,9 +99,14 @@ public class AbsAudioPlayer: CAPPlugin, CAPBridgedPlugin {
             }
 
             do {
+                logger.log("Local playback session created with currentTime: \(playbackSession.currentTime)s")
                 if (startTimeOverride != nil) {
+                    logger.log("Using startTimeOverride: \(startTimeOverride!)s")
                     playbackSession.currentTime = startTimeOverride!
+                } else {
+                    logger.log("Using saved progress: \(playbackSession.currentTime)s")
                 }
+                logger.log("Final currentTime before starting: \(playbackSession.currentTime)s")
                 try playbackSession.save()
                 try self.startPlaybackSession(playbackSession, playWhenReady: playWhenReady, playbackRate: playbackRate)
                 call.resolve(try playbackSession.asDictionary())
@@ -112,9 +118,14 @@ public class AbsAudioPlayer: CAPPlugin, CAPBridgedPlugin {
         } else { // Playing from the server
             ApiClient.startPlaybackSession(libraryItemId: libraryItemId!, episodeId: episodeId, forceTranscode: false) { [weak self] session in
                 do {
+                    self?.logger.log("Server playback session created with currentTime: \(session.currentTime)s")
                     if (startTimeOverride != nil) {
+                        self?.logger.log("Using startTimeOverride: \(startTimeOverride!)s")
                         session.currentTime = startTimeOverride!
+                    } else {
+                        self?.logger.log("Using saved progress: \(session.currentTime)s")
                     }
+                    self?.logger.log("Final currentTime before starting: \(session.currentTime)s")
                     try session.save()
                     try self?.startPlaybackSession(session, playWhenReady: playWhenReady, playbackRate: playbackRate)
                     call.resolve(try session.asDictionary())

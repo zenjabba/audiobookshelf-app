@@ -1,6 +1,6 @@
 <template>
   <div class="relative">
-    <input v-model="input" ref="input" autofocus :type="type" :disabled="disabled" :readonly="readonly" autocorrect="off" autocapitalize="none" autocomplete="off" :placeholder="placeholder" class="py-2 w-full outline-none bg-primary disabled:text-fg-muted" :class="inputClass" @keyup="keyup" />
+    <input v-model="input" ref="input" autofocus :type="type" :disabled="disabled" :readonly="readonly" autocorrect="off" autocapitalize="none" autocomplete="off" :placeholder="placeholder" class="py-2 w-full outline-none bg-primary disabled:text-fg-muted" :class="inputClass" @keyup="keyup" @click="handleClick" @touchstart="handleTouchStart" />
     <div v-if="prependIcon" class="absolute top-0 left-0 h-full px-2 flex items-center justify-center">
       <span class="material-symbols text-lg">{{ prependIcon }}</span>
     </div>
@@ -78,6 +78,20 @@ export default {
       if (this.$refs.input) {
         this.input = this.$refs.input.value
       }
+    },
+    handleClick() {
+      // Force focus on iOS
+      if (this.$refs.input && !this.disabled && !this.readonly) {
+        this.$refs.input.focus()
+      }
+    },
+    handleTouchStart(event) {
+      // Prevent default touch behavior and force focus
+      if (this.$refs.input && !this.disabled && !this.readonly) {
+        event.preventDefault()
+        this.$refs.input.focus()
+        this.$refs.input.click()
+      }
     }
   },
   mounted() {}
@@ -90,5 +104,24 @@ input[type='time']::-webkit-calendar-picker-indicator {
 }
 html[data-theme='light'] input[type='time']::-webkit-calendar-picker-indicator {
   filter: unset;
+}
+
+/* iOS keyboard fixes */
+input {
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  appearance: none;
+  /* Ensure touch events work properly */
+  touch-action: manipulation;
+  /* Fix iOS zoom on input focus */
+  font-size: 16px;
+}
+
+/* Ensure inputs are touchable on iOS */
+@supports (-webkit-touch-callout: none) {
+  input {
+    min-height: 44px;
+    /* iOS recommended touch target size */
+  }
 }
 </style>

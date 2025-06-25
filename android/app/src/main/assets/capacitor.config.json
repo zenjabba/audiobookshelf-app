@@ -1,6 +1,6 @@
 {
-	"appId": "com.audiobookshelf.app",
-	"appName": "audiobookshelf-app",
+	"appId": "com.datahorders.app",
+	"appName": "datahorders-app",
 	"webDir": "dist",
 	"plugins": {
 		"CapacitorHttp": {

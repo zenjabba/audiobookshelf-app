@@ -65,18 +65,58 @@ class PlayerProgress {
     
     private func updateLocalMediaProgressFromLocalSession() throws {
         guard let session = PlayerHandler.getPlaybackSession() else { return }
-        guard session.isLocal else { return }
+        
+        // For streaming media, we need to update the LibraryItem's userMediaProgress
+        if !session.isLocal {
+            guard let libraryItemId = session.libraryItemId else { return }
+            
+            logger.log("Updating streaming media progress for session: \(session.id), libraryItemId: \(libraryItemId)")
+            
+            // Fetch the library item from the database
+            let realm = try Realm()
+            guard let libraryItem = realm.object(ofType: LibraryItem.self, forPrimaryKey: libraryItemId) else {
+                logger.error("Failed to find library item for streaming session: \(libraryItemId)")
+                return
+            }
+            
+            // Update or create the media progress
+            try libraryItem.update {
+                if libraryItem.userMediaProgress == nil {
+                    libraryItem.userMediaProgress = MediaProgress()
+                    libraryItem.userMediaProgress?.id = UUID().uuidString
+                    libraryItem.userMediaProgress?.userId = session.userId ?? ""
+                    libraryItem.userMediaProgress?.libraryItemId = libraryItemId
+                    libraryItem.userMediaProgress?.episodeId = session.episodeId
+                }
+                
+                libraryItem.userMediaProgress?.currentTime = session.currentTime
+                libraryItem.userMediaProgress?.duration = session.duration
+                libraryItem.userMediaProgress?.progress = session.currentTime / session.duration
+                libraryItem.userMediaProgress?.lastUpdate = Date().timeIntervalSince1970 * 1000
+                libraryItem.userMediaProgress?.isFinished = session.progress >= 0.95
+            }
+            
+            logger.log("Streaming progress saved to library item - currentTime: \(session.currentTime), progress: \(session.progress)")
+            
+            // Send the progress update notification
+            NotificationCenter.default.post(name: NSNotification.Name(PlayerEvents.localProgress.rawValue), object: nil)
+            return
+        }
+        
+        // Original code for local media
+        logger.log("Updating local media progress for session: \(session.id), localMediaProgressId: \(session.localMediaProgressId ?? "nil")")
         
         let localMediaProgress = try LocalMediaProgress.fetchOrCreateLocalMediaProgress(localMediaProgressId: session.localMediaProgressId, localLibraryItemId: session.localLibraryItem?.id, localEpisodeId: session.episodeId)
         guard let localMediaProgress = localMediaProgress else {
             // Local media progress should have been created
             // If we're here, it means a library id is invalid
+            logger.error("Failed to create/fetch local media progress for localLibraryItemId: \(session.localLibraryItem?.id ?? "nil"), episodeId: \(session.episodeId ?? "nil")")
             return
         }
 
         try localMediaProgress.updateFromPlaybackSession(session)
         
-        logger.log("Local progress saved to the database")
+        logger.log("Local progress saved to the database - currentTime: \(localMediaProgress.currentTime), progress: \(localMediaProgress.progress)")
         
         // Send the local progress back to front-end
         NotificationCenter.default.post(name: NSNotification.Name(PlayerEvents.localProgress.rawValue), object: nil)
@@ -84,7 +124,8 @@ class PlayerProgress {
     
     private func updateAllServerSessionFromLocalSession() async throws {
         try await withThrowingTaskGroup(of: Void.self) { [self] group in
-            for session in try Realm(queue: nil).objects(PlaybackSession.self).where({ $0.serverConnectionConfigId == Store.serverConfig?.id }) {
+            let realm = try await Realm()
+            for session in realm.objects(PlaybackSession.self).where({ $0.serverConnectionConfigId == Store.serverConfig?.id }) {
                 let session = session.freeze()
                 group.addTask {
                     try await self.updateServerSessionFromLocalSession(session)
@@ -156,7 +197,8 @@ class PlayerProgress {
     // TODO: Unused for now
     private func updateLocalSessionFromServerMediaProgress() async throws {
         logger.log("updateLocalSessionFromServerMediaProgress: Checking if local media progress was updated on server")
-        guard let session = try Realm(queue: nil).objects(PlaybackSession.self).last(where: {
+        let realm = try await Realm()
+        guard let session = realm.objects(PlaybackSession.self).last(where: {
             $0.isActiveSession == true && $0.serverConnectionConfigId == Store.serverConfig?.id
         })?.freeze() else {
             logger.log("updateLocalSessionFromServerMediaProgress: Failed to get session")

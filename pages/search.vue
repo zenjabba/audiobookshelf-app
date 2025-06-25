@@ -30,9 +30,9 @@
 
       <p v-if="seriesResults.length" class="font-semibold text-sm mb-1 mt-2">{{ $strings.LabelSeries }}</p>
       <template v-for="seriesResult in seriesResults">
-        <div :key="seriesResult.series.id" class="w-full h-16 py-1">
-          <nuxt-link :to="`/bookshelf/series/${seriesResult.series.id}`">
-            <cards-series-search-card :series="seriesResult.series" :book-items="seriesResult.books" />
+        <div :key="seriesResult.id" class="w-full h-16 py-1">
+          <nuxt-link :to="`/bookshelf/series/${seriesResult.id}`">
+            <cards-series-search-card :series="seriesResult" :book-items="seriesResult.books || []" />
           </nuxt-link>
         </div>
       </template>
@@ -123,8 +123,20 @@ export default {
 
       this.isFetching = false
 
-      this.bookResults = results?.book || []
-      this.podcastResults = results?.podcast || []
+      // Transform book results to expected format
+      this.bookResults = (results?.book || []).map(item => ({
+        libraryItem: item,
+        matchKey: 'title', // Default to title match
+        matchText: item.media?.metadata?.title || ''
+      }))
+      
+      // Transform podcast results to expected format
+      this.podcastResults = (results?.podcast || []).map(item => ({
+        libraryItem: item,
+        matchKey: 'title', // Default to title match
+        matchText: item.media?.metadata?.title || ''
+      }))
+      
       this.seriesResults = results?.series || []
       this.authorResults = results?.authors || []
       this.narratorResults = results?.narrators || []

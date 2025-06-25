@@ -28,6 +28,10 @@ textarea {
   height: calc(100% - 64px);
   min-height: calc(100% - 64px);
   max-height: calc(100% - 64px);
+  -webkit-overflow-scrolling: touch;
+  /* Ensure smooth momentum scrolling on iOS */
+  position: relative;
+  /* Fixes iOS scroll issues */
 }
 
 #content.playerOpen {

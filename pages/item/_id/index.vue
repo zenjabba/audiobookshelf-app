@@ -100,8 +100,8 @@
           <div v-if="series?.length" class="text-fg-muted uppercase text-sm">{{ $strings.LabelSeries }}</div>
           <div v-if="series?.length" class="text-sm">
             <template v-for="(series, index) in seriesList">
-              <nuxt-link :key="series.id" :to="`/bookshelf/series/${series.id}`" class="underline whitespace-nowrap">{{ series.text }}</nuxt-link
-              ><span :key="`${series.id}-comma`" v-if="index < seriesList.length - 1">, </span>
+              <nuxt-link :key="series.id" :to="`/bookshelf/library?filter=series.${$encode(series.name)}`" class="underline whitespace-nowrap">{{ series.text }}</nuxt-link>
+              <span :key="`${series.id}-comma`" v-if="index < seriesList.length - 1">, </span>
             </template>
           </div>
 
@@ -588,6 +588,17 @@ export default {
             message: `Start playback for "${this.title}" at ${this.$secondsToTimestamp(startTime)}?`
           })
           if (!value) return
+        }
+
+        // If no explicit startTime provided, check for saved progress
+        if (startTime === null || startTime === undefined) {
+          // Get the appropriate progress based on whether we're playing local or server item
+          // Use hasLocal to determine which progress to check, since libraryItemId may have been modified above
+          const progress = this.hasLocal ? this.localItemProgress : this.serverItemProgress
+          if (progress?.currentTime > 0) {
+            console.log(`[play] Using saved progress position: ${progress.currentTime}s`)
+            startTime = progress.currentTime
+          }
         }
 
         this.$store.commit('setPlayerIsStartingPlayback', libraryItemId)

@@ -1,7 +1,7 @@
 {
-  "name": "audiobookshelf-app",
-  "version": "0.9.81.27-datahorders",
-  "author": "advplyr",
+  "name": "datahorders-app",
+  "version": "0.9.82.0-datahorders",
+  "author": "armsby",
   "scripts": {
     "dev": "nuxt --hostname 0.0.0.0 --port 1337",
     "build": "nuxt build",

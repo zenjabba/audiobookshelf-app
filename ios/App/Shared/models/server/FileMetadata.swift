@@ -27,10 +27,10 @@ class FileMetadata: EmbeddedObject, Codable {
         super.init()
         let values = try decoder.container(keyedBy: CodingKeys.self)
         filename = try values.decode(String.self, forKey: .filename)
-        ext = try values.decode(String.self, forKey: .ext)
-        path = try values.decode(String.self, forKey: .path)
-        relPath = try values.decode(String.self, forKey: .relPath)
-        size = try values.decode(Double.self, forKey: .size)
+        ext = try values.decodeIfPresent(String.self, forKey: .ext) ?? ""
+        path = try values.decodeIfPresent(String.self, forKey: .path) ?? ""
+        relPath = try values.decodeIfPresent(String.self, forKey: .relPath) ?? ""
+        size = try values.decodeIfPresent(Double.self, forKey: .size) ?? 0
     }
     
     func encode(to encoder: Encoder) throws {

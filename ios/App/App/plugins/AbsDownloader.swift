@@ -237,6 +237,24 @@ public class AbsDownloader: CAPPlugin, CAPBridgedPlugin, URLSessionDownloadDeleg
         ApiClient.getLibraryItemWithProgress(libraryItemId: libraryItemId, episodeId: episodeId) { [weak self] libraryItem in
             if let libraryItem = libraryItem {
                 self?.logger.log("Got library item from server \(libraryItem.id)")
+                self?.logger.log("Media type: \(libraryItem.mediaType)")
+                self?.logger.log("Tracks count: \(libraryItem.media?.tracks.count ?? 0)")
+                self?.logger.log("AudioFiles count: \(libraryItem.media?.audioFiles.count ?? 0)")
+                
+                // Log track details
+                if let tracks = libraryItem.media?.tracks {
+                    for (index, track) in tracks.enumerated() {
+                        self?.logger.log("Track \(index): contentUrl=\(track.contentUrl ?? "nil"), metadata.filename=\(track.metadata?.filename ?? "nil")")
+                    }
+                }
+                
+                // Log audioFile details
+                if let audioFiles = libraryItem.media?.audioFiles {
+                    for (index, audioFile) in audioFiles.enumerated() {
+                        self?.logger.log("AudioFile \(index): ino=\(audioFile.ino), metadata.filename=\(audioFile.metadata?.filename ?? "nil")")
+                    }
+                }
+                
                 do {
                     if let episodeId = episodeId {
                         // Download a podcast episode
@@ -270,7 +288,11 @@ public class AbsDownloader: CAPPlugin, CAPBridgedPlugin, URLSessionDownloadDeleg
         // Handle the different media type downloads
         switch item.mediaType {
         case "book":
-            guard item.media?.tracks.count ?? 0 > 0 || item.media?.ebookFile != nil else { throw LibraryItemDownloadError.noTracks }
+            logger.log("Book download check: tracks=\(item.media?.tracks.count ?? 0), hasEbook=\(item.media?.ebookFile != nil)")
+            guard item.media?.tracks.count ?? 0 > 0 || item.media?.ebookFile != nil else { 
+                logger.error("Download failed: No tracks found. Tracks array is empty.")
+                throw LibraryItemDownloadError.noTracks 
+            }
             item.media?.tracks.forEach { t in tracks.append(AudioTrack.detachCopy(of: t)!) }
         case "podcast":
             guard let episode = episode else { throw LibraryItemDownloadError.podcastEpisodeNotFound }
@@ -317,10 +339,17 @@ public class AbsDownloader: CAPPlugin, CAPBridgedPlugin, URLSessionDownloadDeleg
     }
     
     private func startLibraryItemTrackDownload(downloadItemId: String, item: LibraryItem, position: Int, track: AudioTrack, episode: PodcastEpisode?) throws -> DownloadItemPartTask {
-        logger.log("TRACK \(track.contentUrl!)")
+        logger.log("TRACK contentUrl: \(track.contentUrl ?? "nil")")
         
-        // If we don't name metadata, then we can't proceed
-        guard let filename = track.metadata?.filename else {
+        // If we don't have metadata, then we can't proceed
+        guard let metadata = track.metadata else {
+            logger.error("Track has no metadata object")
+            throw LibraryItemDownloadError.noMetadata
+        }
+        
+        let filename = metadata.filename
+        if filename.isEmpty {
+            logger.error("Track metadata has empty filename")
             throw LibraryItemDownloadError.noMetadata
         }
         

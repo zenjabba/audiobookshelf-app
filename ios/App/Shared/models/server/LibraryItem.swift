@@ -38,6 +38,10 @@ class LibraryItem: Object, Codable {
         super.init()
     }
     
+    override static func primaryKey() -> String? {
+        return "id"
+    }
+    
     required init(from decoder: Decoder) throws {
         super.init()
         

@@ -14,8 +14,36 @@ class Database {
     }()
     
     private let logger = AppLogger(category: "Database")
+    private let realmConfig: Realm.Configuration
 
-    private init() {}
+    private init() {
+        // Configure Realm with migration
+        self.realmConfig = Realm.Configuration(
+            schemaVersion: 21, // Increment this when making schema changes
+            migrationBlock: { migration, oldSchemaVersion in
+                if oldSchemaVersion < 21 {
+                    // Migration for adding primary key to LibraryItem
+                    // First, we need to handle any duplicate IDs
+                    var seenIds = Set<String>()
+                    migration.enumerateObjects(ofType: LibraryItem.className()) { oldObject, newObject in
+                        guard let newObject = newObject,
+                              let id = oldObject?["id"] as? String else { return }
+                        
+                        if seenIds.contains(id) {
+                            // This is a duplicate, delete it
+                            migration.delete(newObject)
+                        } else {
+                            seenIds.insert(id)
+                        }
+                    }
+                }
+            },
+            deleteRealmIfMigrationNeeded: false
+        )
+        
+        // Set as default configuration
+        Realm.Configuration.defaultConfiguration = self.realmConfig
+    }
     
     public func setServerConnectionConfig(config: ServerConnectionConfig) {
         let config = config
@@ -215,8 +243,14 @@ class Database {
     public func getAllLocalMediaProgress() -> [LocalMediaProgress] {
         do {
             let realm = try Realm()
-            return Array(realm.objects(LocalMediaProgress.self))
+            let allProgress = Array(realm.objects(LocalMediaProgress.self))
+            logger.log("getAllLocalMediaProgress: Found \(allProgress.count) local media progress entries")
+            for progress in allProgress {
+                logger.log("Progress ID: \(progress.id), currentTime: \(progress.currentTime), progress: \(progress.progress)")
+            }
+            return allProgress
         } catch {
+            logger.error("getAllLocalMediaProgress error: \(error)")
             debugPrint(error)
             return []
         }

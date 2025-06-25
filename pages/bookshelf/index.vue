@@ -1,5 +1,5 @@
 <template>
-  <div class="w-full h-full min-h-full relative">
+  <div class="w-full h-full overflow-y-auto relative">
     <div v-if="attemptingConnection" class="w-full pt-4 flex items-center justify-center">
       <widgets-loading-spinner />
       <p class="pl-4">{{ $strings.MessageAttemptingServerConnection }}</p>
@@ -9,7 +9,7 @@
       <p class="pl-4">{{ $strings.MessageLoadingServerData }}</p>
     </div>
 
-    <div class="w-full" :class="{ 'py-6': altViewEnabled }">
+    <div class="w-full pb-4" :class="{ 'py-6': altViewEnabled }">
       <template v-for="(shelf, index) in shelves">
         <bookshelf-shelf :key="shelf.id" :label="getShelfLabel(shelf)" :entities="shelf.entities" :type="shelf.type" :style="{ zIndex: shelves.length - index }" />
       </template>
@@ -251,6 +251,12 @@ export default {
           console.error('[categories] Failed to fetch categories', error)
           return []
         })
+        console.log('[categories] Server returned categories:', categories.map(c => ({ id: c.id, label: c.label, type: c.type, entityCount: c.entities?.length || 0 })))
+        
+        // Check user's media progress
+        const userMediaProgress = this.$store.state.user.mediaProgress || []
+        const inProgressItems = userMediaProgress.filter(mp => mp.progress > 0 && mp.progress < 1)
+        console.log('[categories] User has', inProgressItems.length, 'items in progress:', inProgressItems.map(mp => ({ libraryItemId: mp.libraryItemId, progress: mp.progress })))
         if (!categories.length) {
           // Failed to load categories so use local shelves
           console.warn(`[categories] Failed to get server categories so using local categories`)
@@ -333,9 +339,23 @@ export default {
     },
     initListeners() {
       this.$eventBus.$on('library-changed', this.libraryChanged)
+      this.$eventBus.$on('local-media-progress-updated', this.localMediaProgressUpdated)
+      this.$eventBus.$on('user_media_progress_updated', this.streamingMediaProgressUpdated)
     },
     removeListeners() {
       this.$eventBus.$off('library-changed', this.libraryChanged)
+      this.$eventBus.$off('local-media-progress-updated', this.localMediaProgressUpdated)
+      this.$eventBus.$off('user_media_progress_updated', this.streamingMediaProgressUpdated)
+    },
+    localMediaProgressUpdated() {
+      console.log('[categories] Local media progress updated, refreshing categories')
+      // Refresh categories to update Continue Listening shelves
+      this.fetchCategories()
+    },
+    streamingMediaProgressUpdated(payload) {
+      console.log('[categories] Streaming media progress updated', payload)
+      // Refresh categories to update Continue Listening shelves
+      this.fetchCategories()
     },
     async checkLibrarySize() {
       try {

@@ -202,14 +202,15 @@ class ApiClient {
             }.map { $0.freeze() }
             logger.log("syncLocalSessionsWithServer: Found \(localMediaProgressList.count) local media progress for server")
             
-            if (localMediaProgressList.isEmpty) {
-                logger.log("syncLocalSessionsWithServer: No local progress to sync")
-            } else {
-                let currentUser = await ApiClient.getCurrentUser()
-                guard let currentUser = currentUser else {
-                    logger.log("syncLocalSessionsWithServer: No User")
-                    return
-                }
+            // Get current user to sync all media progress (both local and streaming)
+            let currentUser = await ApiClient.getCurrentUser()
+            guard let currentUser = currentUser else {
+                logger.log("syncLocalSessionsWithServer: No User")
+                return
+            }
+            
+            // Sync local media progress
+            if (!localMediaProgressList.isEmpty) {
                 try currentUser.mediaProgress.forEach { mediaProgress in
                     let localMediaProgress = localMediaProgressList.first { lmp in
                         if (lmp.episodeId != nil) {
@@ -228,6 +229,7 @@ class ApiClient {
                     }
                 }
             }
+            
             
             // Send saved playback sessions to server and remove them from db
             let playbackSessions = Database.shared.getAllPlaybackSessions().filter {
@@ -280,7 +282,16 @@ class ApiClient {
             endpoint += "&episodeId=\(episodeId!)"
         }
         
+        logger.log("getLibraryItemWithProgress: Fetching from endpoint: \(endpoint)")
+        
         ApiClient.getResource(endpoint: endpoint, decodable: LibraryItem.self) { obj in
+            if let obj = obj {
+                logger.log("getLibraryItemWithProgress: Got library item with media type: \(obj.mediaType ?? "nil")")
+                logger.log("getLibraryItemWithProgress: Media tracks count: \(obj.media?.tracks.count ?? -1)")
+                logger.log("getLibraryItemWithProgress: Media audioFiles count: \(obj.media?.audioFiles.count ?? -1)")
+            } else {
+                logger.error("getLibraryItemWithProgress: Failed to decode library item")
+            }
             callback(obj)
         }
     }

@@ -1,13 +1,29 @@
 <template>
-  <div id="bookshelf" class="w-full max-w-full h-full">
-    <template v-for="shelf in Math.min(totalShelves, shelvesPerPage + 2)">
-      <div :key="shelf" class="w-full px-2 relative" :class="showBookshelfListView || altViewEnabled ? '' : 'bookshelfRow'" :id="`shelf-${shelf - 1}`" :style="{ height: shelfHeight + 'px' }">
-        <div v-if="!showBookshelfListView && !altViewEnabled" class="w-full absolute bottom-0 left-0 z-30 bookshelfDivider" style="min-height: 16px" :class="`h-${shelfDividerHeightIndex}`" />
-        <div v-else-if="showBookshelfListView" class="flex border-t border-white border-opacity-10" />
-      </div>
-    </template>
+  <div id="bookshelf" ref="bookshelf" class="w-full max-w-full h-full overflow-y-auto">
+    <div v-if="!initialized && user" class="w-full py-16 text-center text-xl">Loading library...</div>
+    
+    <!-- Virtual spacer to maintain correct scroll height -->
+    <div :style="{ height: virtualSpacerHeight + 'px', position: 'relative' }">
+      <!-- Only render visible shelves -->
+      <template v-for="shelf in visibleShelves">
+        <div 
+          :key="`shelf-${shelf}`" 
+          class="w-full px-2 absolute" 
+          :class="showBookshelfListView || altViewEnabled ? '' : 'bookshelfRow'" 
+          :id="`shelf-${shelf}`" 
+          :style="{ 
+            height: shelfHeight + 'px', 
+            minHeight: shelfHeight + 'px',
+            transform: `translateY(${shelf * shelfHeight}px)`
+          }"
+        >
+          <div v-if="!showBookshelfListView && !altViewEnabled" class="w-full absolute bottom-0 left-0 z-30 bookshelfDivider" style="min-height: 16px" :class="`h-${shelfDividerHeightIndex}`" />
+          <div v-else-if="showBookshelfListView" class="flex border-t border-white border-opacity-10" />
+        </div>
+      </template>
+    </div>
 
-    <div v-show="!entities.length && initialized" class="w-full py-16 text-center text-xl">
+    <div v-show="!Object.keys(entities).length && initialized" class="w-full py-16 text-center text-xl">
       <div v-if="page === 'collections'" class="py-4">{{ $strings.MessageNoCollections }}</div>
       <div v-else class="py-4 capitalize">No {{ entityName }}</div>
       <ui-btn v-if="hasFilter" @click="clearFilter">{{ $strings.ButtonClearFilter }}</ui-btn>
@@ -37,7 +53,7 @@ export default {
       initialized: false,
       currentSFQueryString: null,
       isFetchingEntities: false,
-      entities: [],
+      entities: {},
       totalEntities: 0,
       totalShelves: 0,
       entityComponentRefs: {},
@@ -45,7 +61,12 @@ export default {
       pagesLoaded: {},
       isFirstInit: false,
       pendingReset: false,
-      localLibraryItems: []
+      localLibraryItems: [],
+      scrollTimeout: null,
+      lastScrollTop: 0,
+      isScrolling: false,
+      visibleShelves: [],
+      shelfBuffer: 3
     }
   },
   watch: {
@@ -54,6 +75,12 @@ export default {
     },
     seriesId() {
       this.resetEntities()
+    },
+    shelfHeight() {
+      // Recalculate visible shelves when shelf height changes
+      if (this.initialized) {
+        this.updateVisibleShelves(this.currScrollTop || 0)
+      }
     }
   },
   computed: {
@@ -127,11 +154,19 @@ export default {
     },
     entityWidth() {
       if (this.showBookshelfListView) return this.bookshelfWidth - 16
+      if (this.entityName === 'authors') {
+        // Use similar sizing to books for more authors per row
+        return this.bookWidth
+      }
       if (this.isBookEntity || this.entityName === 'playlists') return this.bookWidth
       return this.bookWidth * 2
     },
     entityHeight() {
       if (this.showBookshelfListView) return 88
+      if (this.entityName === 'authors') {
+        // Use similar sizing to books with 1.25 aspect ratio
+        return this.bookWidth * 1.25
+      }
       return this.bookHeight
     },
     currentLibraryId() {
@@ -159,6 +194,10 @@ export default {
     sizeMultiplier() {
       const baseSize = this.isCoverSquareAspectRatio ? 192 : 120
       return this.entityWidth / baseSize
+    },
+    virtualSpacerHeight() {
+      // Total height needed for all shelves
+      return this.totalShelves * this.shelfHeight
     }
   },
   methods: {
@@ -180,8 +219,11 @@ export default {
       const sfQueryString = this.currentSFQueryString ? this.currentSFQueryString + '&' : ''
       const fullQueryString = `?${sfQueryString}limit=${this.booksPerFetch}&page=${page}&minified=1&include=rssfeed,numEpisodesIncomplete`
 
-      const payload = await this.$nativeHttp.get(`/api/libraries/${this.currentLibraryId}/${entityPath}${fullQueryString}`).catch((error) => {
-        console.error('failed to fetch books', error)
+      const fullUrl = `/api/libraries/${this.currentLibraryId}/${entityPath}${fullQueryString}`
+      console.log('[LazyBookshelf] Fetching entities - URL:', fullUrl, 'Page:', page, 'Limit:', this.booksPerFetch)
+      
+      const payload = await this.$nativeHttp.get(fullUrl).catch((error) => {
+        console.error('failed to fetch entities', error)
         return null
       })
 
@@ -191,19 +233,40 @@ export default {
         this.resetEntities()
         return
       }
-      if (payload && payload.results) {
+      if (payload) {
         console.log('Received payload', payload)
+        // Handle different response structures for different entity types
+        let results = payload.results || payload.series || payload.collections || payload.authors || []
+        const total = payload.total !== undefined ? payload.total : results.length
+        
+        // Special handling for authors - if server returns all authors, slice only what we need
+        if (this.entityName === 'authors' && results.length > this.booksPerFetch) {
+          console.log('[LazyBookshelf] Server returned all', results.length, 'authors, slicing to requested range')
+          const sliceStart = page * this.booksPerFetch
+          const sliceEnd = sliceStart + this.booksPerFetch
+          results = results.slice(sliceStart, sliceEnd)
+        }
+        
+        console.log('[LazyBookshelf] Page:', page, 'Start index:', startIndex, 'Results count:', results.length)
         if (!this.initialized) {
           this.initialized = true
-          this.totalEntities = payload.total
+          this.totalEntities = total
           this.totalShelves = Math.ceil(this.totalEntities / this.entitiesPerShelf)
-          this.entities = new Array(this.totalEntities)
+          // Use object instead of array to avoid pre-allocating memory for all entities
+          this.entities = {}
           this.$eventBus.$emit('bookshelf-total-entities', this.totalEntities)
+          console.log('[LazyBookshelf] Initialized - Total entities:', this.totalEntities, 'Total shelves:', this.totalShelves, 'Entities per shelf:', this.entitiesPerShelf)
         }
 
-        for (let i = 0; i < payload.results.length; i++) {
+        for (let i = 0; i < results.length; i++) {
           const index = i + startIndex
-          this.entities[index] = payload.results[i]
+          this.entities[index] = results[i]
+          
+          // Log first few entities for debugging
+          if (i < 3) {
+            console.log(`[LazyBookshelf] Entity at global index ${index}:`, results[i].name || results[i].title || results[i].id)
+          }
+          
           if (this.entityComponentRefs[index]) {
             this.entityComponentRefs[index].setEntity(this.entities[index])
 
@@ -215,6 +278,8 @@ export default {
             }
           }
         }
+        
+        console.log('[LazyBookshelf] Page', page, 'loaded. Total entities loaded:', Object.keys(this.entities).length)
       }
     },
     async loadPage(page) {
@@ -226,42 +291,88 @@ export default {
       await this.fetchEntities(page)
     },
     mountEntites(fromIndex, toIndex) {
+      console.log('[LazyBookshelf] Mounting entities from', fromIndex, 'to', toIndex, 'Entities available:', Object.keys(this.entities).length)
+      console.log('[LazyBookshelf] Currently mounted indices:', this.entityIndexesMounted.slice().sort((a, b) => a - b))
+      
       for (let i = fromIndex; i < toIndex; i++) {
         if (!this.entityIndexesMounted.includes(i)) {
+          if (!this.entities[i]) {
+            console.warn('[LazyBookshelf] No entity at index', i, '- skipping mount')
+            continue
+          }
+          console.log('[LazyBookshelf] Mounting card at index', i, 'Entity exists:', !!this.entities[i])
           this.cardsHelpers.mountEntityCard(i)
         }
+      }
+      console.log('[LazyBookshelf] Mounted entities count:', this.entityIndexesMounted.length)
+      console.log('[LazyBookshelf] Mounted indices range:', Math.min(...this.entityIndexesMounted), '-', Math.max(...this.entityIndexesMounted))
+    },
+    updateVisibleShelves(scrollTop) {
+      const firstVisibleShelf = Math.max(0, Math.floor(scrollTop / this.shelfHeight) - this.shelfBuffer)
+      const lastVisibleShelf = Math.min(this.totalShelves - 1, Math.ceil((scrollTop + this.bookshelfHeight) / this.shelfHeight) + this.shelfBuffer)
+      
+      // Create array of visible shelf indices
+      const newVisibleShelves = []
+      for (let i = firstVisibleShelf; i <= lastVisibleShelf; i++) {
+        newVisibleShelves.push(i)
+      }
+      
+      // Only update if changed
+      if (JSON.stringify(this.visibleShelves) !== JSON.stringify(newVisibleShelves)) {
+        console.log('[LazyBookshelf] Updating visible shelves from', this.visibleShelves.length, 'to', newVisibleShelves.length, 'shelves')
+        this.visibleShelves = newVisibleShelves
       }
     },
     handleScroll(scrollTop) {
       this.currScrollTop = scrollTop
-      var firstShelfIndex = Math.floor(scrollTop / this.shelfHeight)
+      
+      // Update visible shelves first
+      this.updateVisibleShelves(scrollTop)
+      
+      // Debug logging
+      console.log('[LazyBookshelf] handleScroll - scrollTop:', scrollTop, 'shelfHeight:', this.shelfHeight, 'entitiesPerShelf:', this.entitiesPerShelf)
+      
+      var firstShelfIndex = Math.max(0, Math.floor(scrollTop / this.shelfHeight))
       var lastShelfIndex = Math.ceil((scrollTop + this.bookshelfHeight) / this.shelfHeight)
       lastShelfIndex = Math.min(this.totalShelves - 1, lastShelfIndex)
 
-      var firstBookIndex = firstShelfIndex * this.entitiesPerShelf
-      var lastBookIndex = lastShelfIndex * this.entitiesPerShelf + this.entitiesPerShelf
-      lastBookIndex = Math.min(this.totalEntities, lastBookIndex)
+      var firstBookIndex = Math.max(0, firstShelfIndex * this.entitiesPerShelf)
+      var lastBookIndex = Math.min(this.totalEntities, (lastShelfIndex + 1) * this.entitiesPerShelf)
+
+      console.log('[LazyBookshelf] Shelf indices:', firstShelfIndex, '-', lastShelfIndex, 'Entity indices:', firstBookIndex, '-', lastBookIndex)
 
       var firstBookPage = Math.floor(firstBookIndex / this.booksPerFetch)
-      var lastBookPage = Math.floor(lastBookIndex / this.booksPerFetch)
+      var lastBookPage = Math.floor((lastBookIndex - 1) / this.booksPerFetch)
       if (!this.pagesLoaded[firstBookPage]) {
         console.log('Must load next batch', firstBookPage, 'book index', firstBookIndex)
         this.loadPage(firstBookPage)
       }
-      if (!this.pagesLoaded[lastBookPage]) {
+      if (lastBookPage !== firstBookPage && !this.pagesLoaded[lastBookPage]) {
         console.log('Must load last next batch', lastBookPage, 'book index', lastBookIndex)
         this.loadPage(lastBookPage)
       }
 
-      // Remove entities out of view
+      // Remove entities out of view - with a buffer for smoother scrolling
+      const bufferEntities = this.entitiesPerShelf * 2
+      const removeBeforeIndex = Math.max(0, firstBookIndex - bufferEntities)
+      const removeAfterIndex = Math.min(this.totalEntities, lastBookIndex + bufferEntities)
+      
       this.entityIndexesMounted = this.entityIndexesMounted.filter((_index) => {
-        if (_index < firstBookIndex || _index >= lastBookIndex) {
+        if (_index < removeBeforeIndex || _index >= removeAfterIndex) {
           var el = document.getElementById(`book-card-${_index}`)
           if (el) el.remove()
+          if (this.entityComponentRefs[_index]) {
+            if (this.entityComponentRefs[_index].$destroy) {
+              this.entityComponentRefs[_index].$destroy()
+            }
+            delete this.entityComponentRefs[_index]
+          }
           return false
         }
         return true
       })
+      
+      // Always mount entities that should be visible
       this.mountEntites(firstBookIndex, lastBookIndex)
     },
     destroyEntityComponents() {
@@ -273,13 +384,13 @@ export default {
     },
     setDownloads() {
       if (this.entityName === 'books') {
-        this.entities = []
+        this.entities = {}
         // TOOD: Sort and filter here
-        this.totalEntities = this.entities.length
+        this.totalEntities = 0
         this.totalShelves = Math.ceil(this.totalEntities / this.entitiesPerShelf)
       } else {
         // TODO: Support offline series and collections
-        this.entities = []
+        this.entities = {}
         this.totalEntities = 0
         this.totalShelves = 0
       }
@@ -294,19 +405,27 @@ export default {
       this.entityIndexesMounted = []
       this.entityComponentRefs = {}
       this.pagesLoaded = {}
-      this.entities = []
+      this.entities = {}
       this.totalShelves = 0
       this.totalEntities = 0
       this.currentPage = 0
       this.initialized = false
+      this.visibleShelves = []
 
       this.initSizeData()
       if (this.user) {
         await this.loadPage(0)
         var lastBookIndex = Math.min(this.totalEntities, this.shelvesPerPage * this.entitiesPerShelf)
+        
+        // Set visible shelves before mounting entities
+        this.updateVisibleShelves(0)
+        await this.$nextTick()
+        
         this.mountEntites(0, lastBookIndex)
       } else {
         // Local only
+        // Set initial visible shelves for immediate render
+        this.updateVisibleShelves(0)
       }
     },
     remountEntities() {
@@ -330,6 +449,15 @@ export default {
       var entitiesPerShelfBefore = this.entitiesPerShelf
 
       var { clientHeight, clientWidth } = bookshelf
+      
+      // Check if we have valid dimensions
+      if (!clientHeight || !clientWidth) {
+        console.error('[LazyBookshelf] Invalid bookshelf dimensions:', clientHeight, clientWidth)
+        // Try again after a delay
+        setTimeout(() => this.initSizeData(), 100)
+        return
+      }
+      
       this.bookshelfHeight = clientHeight
       this.bookshelfWidth = clientWidth
       this.entitiesPerShelf = Math.max(1, this.showBookshelfListView ? 1 : Math.floor((this.bookshelfWidth - 16) / this.totalEntityCardWidth))
@@ -337,11 +465,28 @@ export default {
       this.bookshelfMarginLeft = (this.bookshelfWidth - this.entitiesPerShelf * this.totalEntityCardWidth) / 2
 
       const entitiesPerPage = this.shelvesPerPage * this.entitiesPerShelf
-      this.booksPerFetch = Math.ceil(entitiesPerPage / 20) * 20 // Round up to the nearest 20
+      // Use larger fetch size for series and authors to improve scrolling experience
+      if (this.page === 'series' || this.page === 'authors') {
+        this.booksPerFetch = 200
+      } else {
+        this.booksPerFetch = Math.ceil(entitiesPerPage / 20) * 20
+      } // Round up to the nearest 20
+
+      console.log('[LazyBookshelf] Size data - Height:', this.bookshelfHeight, 'Width:', this.bookshelfWidth, 'Entities per shelf:', this.entitiesPerShelf, 'Shelves per page:', this.shelvesPerPage)
+      console.log('[LazyBookshelf] Additional info - Shelf height:', this.shelfHeight, 'Entity width:', this.entityWidth, 'Entity height:', this.entityHeight, 'Total entity card width:', this.totalEntityCardWidth)
+      console.log('[LazyBookshelf] Book dimensions - Width:', this.bookWidth, 'Height:', this.bookHeight, 'Aspect ratio:', this.bookCoverAspectRatio)
+      console.log('[LazyBookshelf] Page type:', this.page, 'Entity name:', this.entityName)
 
       if (this.totalEntities) {
         this.totalShelves = Math.ceil(this.totalEntities / this.entitiesPerShelf)
       }
+      
+      // Force recalculation of shelf positions if entities per shelf changed
+      if (entitiesPerShelfBefore !== this.entitiesPerShelf && this.initialized) {
+        console.log('[LazyBookshelf] Entities per shelf changed from', entitiesPerShelfBefore, 'to', this.entitiesPerShelf, '- remounting entities')
+        this.remountEntities()
+      }
+      
       return entitiesPerShelfBefore < this.entitiesPerShelf // Books per shelf has changed
     },
     async init() {
@@ -357,17 +502,43 @@ export default {
       console.log('Local library items loaded for lazy bookshelf', this.localLibraryItems.length)
 
       this.isFirstInit = true
-      this.initSizeData()
+      
+      // Initialize size data - retry if dimensions are not ready
+      const maxRetries = 10
+      let retries = 0
+      while (retries < maxRetries) {
+        this.initSizeData()
+        if (this.bookshelfHeight > 0 && this.bookshelfWidth > 0) {
+          break
+        }
+        await new Promise(resolve => setTimeout(resolve, 100))
+        retries++
+      }
+      
+      if (this.bookshelfHeight === 0 || this.bookshelfWidth === 0) {
+        console.error('[LazyBookshelf] Failed to get valid bookshelf dimensions after retries')
+        return
+      }
+      
       await this.loadPage(0)
       var lastBookIndex = Math.min(this.totalEntities, this.shelvesPerPage * this.entitiesPerShelf)
+      console.log('[LazyBookshelf] init - Total entities:', this.totalEntities, 'Last book index:', lastBookIndex, 'Total shelves:', this.totalShelves)
+      console.log('[LazyBookshelf] About to mount entities. Shelves per page:', this.shelvesPerPage, 'Entities per shelf:', this.entitiesPerShelf)
+      
+      // Initialize visible shelves
+      this.updateVisibleShelves(0)
+      
+      // Wait for Vue to render the shelf elements before mounting cards
+      await this.$nextTick()
+      
       this.mountEntites(0, lastBookIndex)
 
       // Set last scroll position for this bookshelf page
-      if (this.$store.state.lastBookshelfScrollData[this.page] && window['bookshelf-wrapper']) {
+      if (this.$store.state.lastBookshelfScrollData[this.page] && this.$refs.bookshelf) {
         const { path, scrollTop } = this.$store.state.lastBookshelfScrollData[this.page]
         if (path === this.routeFullPath) {
           // Exact path match with query so use scroll position
-          window['bookshelf-wrapper'].scrollTop = scrollTop
+          this.$refs.bookshelf.scrollTop = scrollTop
         }
       }
     },
@@ -375,16 +546,36 @@ export default {
       if (!e || !e.target) return
       if (!this.user) return
       var { scrollTop } = e.target
+      
+      // Throttle scroll events
+      if (this.scrollTimeout) {
+        clearTimeout(this.scrollTimeout)
+      }
+      
+      // Only handle scroll if position changed significantly (more than 50px)
+      const scrollDiff = Math.abs(scrollTop - this.lastScrollTop)
+      if (scrollDiff < 50 && this.isScrolling) {
+        return
+      }
+      
+      this.isScrolling = true
+      this.scrollTimeout = setTimeout(() => {
+        this.isScrolling = false
+      }, 150)
+      
+      this.lastScrollTop = scrollTop
+      console.log('[LazyBookshelf] Scroll event - scrollTop:', scrollTop, 'diff:', scrollDiff)
       this.handleScroll(scrollTop)
     },
     buildSearchParams() {
       if (this.page === 'search' || this.page === 'collections') {
         return ''
-      } else if (this.page === 'series') {
-        // Sort by name ascending
+      } else if (this.page === 'series' || this.page === 'authors') {
+        // Sort by name ascending for series and authors
         let searchParams = new URLSearchParams()
         searchParams.set('sort', 'name')
         searchParams.set('desc', 0)
+        // Don't add minified here as it's added in the query string already
         return searchParams.toString()
       }
 
@@ -453,16 +644,24 @@ export default {
     libraryItemUpdated(libraryItem) {
       console.log('Item updated', libraryItem)
       if (this.entityName === 'books' || this.entityName === 'series-books') {
-        var indexOf = this.entities.findIndex((ent) => ent && ent.id === libraryItem.id)
-        if (indexOf >= 0) {
-          this.entities[indexOf] = libraryItem
-          if (this.entityComponentRefs[indexOf]) {
-            this.entityComponentRefs[indexOf].setEntity(libraryItem)
+        // Find the entity by iterating through the object
+        let foundIndex = -1
+        for (const index in this.entities) {
+          if (this.entities[index] && this.entities[index].id === libraryItem.id) {
+            foundIndex = parseInt(index)
+            break
+          }
+        }
+        
+        if (foundIndex >= 0) {
+          this.entities[foundIndex] = libraryItem
+          if (this.entityComponentRefs[foundIndex]) {
+            this.entityComponentRefs[foundIndex].setEntity(libraryItem)
 
             if (this.isBookEntity) {
               var localLibraryItem = this.localLibraryItems.find((lli) => lli.libraryItemId == libraryItem.id)
               if (localLibraryItem) {
-                this.entityComponentRefs[indexOf].setLocalLibraryItem(localLibraryItem)
+                this.entityComponentRefs[foundIndex].setLocalLibraryItem(localLibraryItem)
               }
             }
           }
@@ -471,12 +670,21 @@ export default {
     },
     libraryItemRemoved(libraryItem) {
       if (this.entityName === 'books' || this.entityName === 'series-books') {
-        var indexOf = this.entities.findIndex((ent) => ent && ent.id === libraryItem.id)
-        if (indexOf >= 0) {
-          this.entities = this.entities.filter((ent) => ent.id !== libraryItem.id)
-          this.totalEntities = this.entities.length
+        // Find and remove the entity from the object
+        let foundIndex = -1
+        for (const index in this.entities) {
+          if (this.entities[index] && this.entities[index].id === libraryItem.id) {
+            foundIndex = parseInt(index)
+            break
+          }
+        }
+        
+        if (foundIndex >= 0) {
+          delete this.entities[foundIndex]
+          this.totalEntities = Math.max(0, this.totalEntities - 1)
           this.$eventBus.$emit('bookshelf-total-entities', this.totalEntities)
-          this.executeRebuild()
+          // TODO: Implement executeRebuild if needed
+          // this.executeRebuild()
         }
       }
     },
@@ -497,7 +705,7 @@ export default {
       }, 50)
     },
     initListeners() {
-      const bookshelf = document.getElementById('bookshelf-wrapper')
+      const bookshelf = document.getElementById('bookshelf')
       if (bookshelf) {
         bookshelf.addEventListener('scroll', this.scroll)
       }
@@ -519,7 +727,7 @@ export default {
       }
     },
     removeListeners() {
-      const bookshelf = document.getElementById('bookshelf-wrapper')
+      const bookshelf = document.getElementById('bookshelf')
       if (bookshelf) {
         bookshelf.removeEventListener('scroll', this.scroll)
       }
@@ -547,15 +755,23 @@ export default {
   mounted() {
     this.routeFullPath = window.location.pathname + (window.location.search || '')
 
-    this.init()
-    this.initListeners()
+    // Add a small delay to ensure the DOM is ready
+    this.$nextTick(() => {
+      console.log('[LazyBookshelf] Component mounted. Bookshelf element:', this.$refs.bookshelf)
+      if (this.$refs.bookshelf) {
+        const rect = this.$refs.bookshelf.getBoundingClientRect()
+        console.log('[LazyBookshelf] Bookshelf dimensions:', rect.width, 'x', rect.height)
+      }
+      this.init()
+      this.initListeners()
+    })
   },
   beforeDestroy() {
     this.removeListeners()
 
     // Set bookshelf scroll position for specific bookshelf page and query
-    if (window['bookshelf-wrapper']) {
-      this.$store.commit('setLastBookshelfScrollData', { scrollTop: window['bookshelf-wrapper'].scrollTop || 0, path: this.routeFullPath, name: this.page })
+    if (this.$refs.bookshelf) {
+      this.$store.commit('setLastBookshelfScrollData', { scrollTop: this.$refs.bookshelf.scrollTop || 0, path: this.routeFullPath, name: this.page })
     }
   }
 }

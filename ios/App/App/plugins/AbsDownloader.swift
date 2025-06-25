@@ -339,10 +339,16 @@ public class AbsDownloader: CAPPlugin, CAPBridgedPlugin, URLSessionDownloadDeleg
     }
     
     private func startLibraryItemTrackDownload(downloadItemId: String, item: LibraryItem, position: Int, track: AudioTrack, episode: PodcastEpisode?) throws -> DownloadItemPartTask {
-        logger.log("TRACK \(track.contentUrl!)")
+        logger.log("TRACK contentUrl: \(track.contentUrl ?? "nil")")
         
-        // If we don't name metadata, then we can't proceed
-        guard let filename = track.metadata?.filename else {
+        // If we don't have metadata, then we can't proceed
+        guard let metadata = track.metadata else {
+            logger.error("Track has no metadata object")
+            throw LibraryItemDownloadError.noMetadata
+        }
+        
+        guard let filename = metadata.filename else {
+            logger.error("Track metadata has no filename")
             throw LibraryItemDownloadError.noMetadata
         }
         

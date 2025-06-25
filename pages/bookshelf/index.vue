@@ -251,6 +251,12 @@ export default {
           console.error('[categories] Failed to fetch categories', error)
           return []
         })
+        console.log('[categories] Server returned categories:', categories.map(c => ({ id: c.id, label: c.label, type: c.type, entityCount: c.entities?.length || 0 })))
+        
+        // Check user's media progress
+        const userMediaProgress = this.$store.state.user.mediaProgress || []
+        const inProgressItems = userMediaProgress.filter(mp => mp.progress > 0 && mp.progress < 1)
+        console.log('[categories] User has', inProgressItems.length, 'items in progress:', inProgressItems.map(mp => ({ libraryItemId: mp.libraryItemId, progress: mp.progress })))
         if (!categories.length) {
           // Failed to load categories so use local shelves
           console.warn(`[categories] Failed to get server categories so using local categories`)

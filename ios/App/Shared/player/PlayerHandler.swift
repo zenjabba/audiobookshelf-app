@@ -14,6 +14,9 @@ class PlayerHandler {
     public static func startPlayback(sessionId: String, playWhenReady: Bool, playbackRate: Float) {
         guard let session = Database.shared.getPlaybackSession(id: sessionId) else { return }
         
+        let logger = AppLogger(category: "PlayerHandler")
+        logger.log("startPlayback called - sessionId: \(sessionId), currentTime: \(session.currentTime)s, playWhenReady: \(playWhenReady)")
+        
         // Clean up the existing player
         resetPlayer()
         

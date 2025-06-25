@@ -590,6 +590,17 @@ export default {
           if (!value) return
         }
 
+        // If no explicit startTime provided, check for saved progress
+        if (startTime === null || startTime === undefined) {
+          // Get the appropriate progress based on whether we're playing local or server item
+          // Use hasLocal to determine which progress to check, since libraryItemId may have been modified above
+          const progress = this.hasLocal ? this.localItemProgress : this.serverItemProgress
+          if (progress?.currentTime > 0) {
+            console.log(`[play] Using saved progress position: ${progress.currentTime}s`)
+            startTime = progress.currentTime
+          }
+        }
+
         this.$store.commit('setPlayerIsStartingPlayback', libraryItemId)
         this.$eventBus.$emit('play-item', { libraryItemId, serverLibraryItemId: this.serverLibraryItemId, startTime })
       }

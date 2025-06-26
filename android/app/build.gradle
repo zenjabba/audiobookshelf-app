@@ -23,7 +23,7 @@ kotlin {
 }
 
 android {
-  namespace 'com.datahorders.app'
+  namespace 'com.audiobookshelf.app'
   buildFeatures {
     viewBinding true
     buildConfig true
@@ -33,14 +33,14 @@ android {
   }
   compileSdk rootProject.ext.compileSdkVersion
   defaultConfig {
-    applicationId "com.datahorders.app"
+    applicationId "com.datahordersbookshelf.app"
     minSdkVersion rootProject.ext.minSdkVersion
     targetSdkVersion rootProject.ext.targetSdkVersion
     versionCode 112
     versionName "0.9.81-beta"
     testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
     manifestPlaceholders = [
-      "appAuthRedirectScheme": "com.datahorders.app"
+      "appAuthRedirectScheme": "com.datahordersbookshelf.app"
     ]
     aaptOptions {
       // Files and dirs to omit from the packaged assets dir, modified to accommodate modern web apps.

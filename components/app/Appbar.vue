@@ -1,8 +1,8 @@
 <template>
   <div class="w-full h-16 bg-primary relative z-20">
     <div id="appbar" class="absolute top-0 left-0 w-full h-full flex items-center px-2">
-      <nuxt-link v-show="!showBack" to="/" class="mr-3 rounded-lg bg-bg/20 p-1">
-        <img src="/Logo.png" class="h-8 w-8 rounded-md" />
+      <nuxt-link v-show="!showBack" to="/" class="mr-3">
+        <img src="/Logo.png" class="h-10 w-10" />
       </nuxt-link>
       <a v-if="showBack" @click="back" class="rounded-full h-10 w-10 flex items-center justify-center mr-2 cursor-pointer">
         <span class="material-symbols text-3xl text-fg">arrow_back</span>

@@ -462,7 +462,13 @@ export default {
       console.log('[showDownload] showPlay:', this.showPlay)
       console.log('[showDownload] showRead:', this.showRead)
       
-      if (this.isPodcast || this.hasLocal) return false
+      // Check if item is currently downloading
+      const downloadItem = this.$store.getters['globals/getDownloadItem'](this.libraryItemId)
+      const isDownloading = downloadItem && !downloadItem.isFinished && !downloadItem.failed
+      console.log('[showDownload] isDownloading:', isDownloading)
+      console.log('[showDownload] downloadItem:', downloadItem)
+      
+      if (this.isPodcast || this.hasLocal || isDownloading) return false
       return this.user && this.userCanDownload && (this.showPlay || this.showRead)
     },
     libraryFiles() {
@@ -643,6 +649,14 @@ export default {
       this.download(localFolder)
     },
     async downloadClick() {
+      // Check if already downloading
+      const existingDownload = this.$store.getters['globals/getDownloadItem'](this.libraryItemId)
+      if (existingDownload && !existingDownload.isFinished && !existingDownload.failed) {
+        console.warn('[downloadClick] Item is already downloading:', this.libraryItemId)
+        this.$toast.warning('This item is already downloading')
+        return
+      }
+      
       if (this.downloadItem || this.startingDownload) return
 
       const hasPermission = await this.checkCellularPermission('download')

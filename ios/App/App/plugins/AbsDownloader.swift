@@ -234,6 +234,13 @@ public class AbsDownloader: CAPPlugin, CAPBridgedPlugin, URLSessionDownloadDeleg
         logger.log("Download library item \(libraryItemId ?? "N/A") / episode \(episodeId ?? "N/A")")
         guard let libraryItemId = libraryItemId else { return call.resolve(["error": "libraryItemId not specified"]) }
         
+        // Check if already downloading
+        let downloadId = episodeId != nil ? "\(libraryItemId)-\(episodeId!)" : libraryItemId
+        if let existingDownload = Database.shared.getDownloadItem(downloadItemId: downloadId) {
+            logger.log("Download already exists for \(downloadId)")
+            return call.resolve(["error": "Download already started for this media entity"])
+        }
+        
         ApiClient.getLibraryItemWithProgress(libraryItemId: libraryItemId, episodeId: episodeId) { [weak self] libraryItem in
             if let libraryItem = libraryItem {
                 self?.logger.log("Got library item from server \(libraryItem.id)")

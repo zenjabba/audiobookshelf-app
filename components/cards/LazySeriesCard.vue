@@ -2,11 +2,17 @@
   <div ref="card" :id="`series-card-${index}`" :style="{ width: width + 'px', height: height + 'px' }" class="rounded-sm cursor-pointer z-30" @click="clickCard">
     <div class="absolute top-0 left-0 w-full box-shadow-book shadow-height" />
     <div class="w-full h-full bg-primary relative rounded overflow-hidden">
-      <covers-group-cover v-if="series && books.length" ref="cover" :id="seriesId" :name="title" :book-items="books" :width="width" :height="height" :book-cover-aspect-ratio="bookCoverAspectRatio" />
-      <div v-else-if="series" class="absolute inset-0 flex items-center justify-center p-4 bg-gradient-to-br from-gray-700 to-gray-900">
-        <div class="text-center">
-          <p class="text-gray-200 font-semibold" :style="{ fontSize: labelFontSize + 'rem' }">{{ title }}</p>
-          <p v-if="series.numBooks" class="text-gray-400 text-xs mt-1">{{ series.numBooks }} {{ series.numBooks === 1 ? 'book' : 'books' }}</p>
+      <covers-group-cover v-if="series && books.length && hasBookData" ref="cover" :id="seriesId" :name="title" :book-items="books" :width="width" :height="height" :book-cover-aspect-ratio="bookCoverAspectRatio" />
+      <div v-else-if="series" class="absolute inset-0 flex items-center justify-center p-3 bg-gradient-to-br from-gray-600 to-gray-800">
+        <div class="absolute inset-0 opacity-20">
+          <div class="absolute inset-0 bg-black rounded" />
+          <div class="absolute top-0 left-0 w-full h-full flex items-center justify-center">
+            <span class="material-symbols text-6xl text-gray-500 opacity-50">collections_bookmark</span>
+          </div>
+        </div>
+        <div class="text-center relative z-10">
+          <p class="text-gray-100 font-bold leading-tight" :style="{ fontSize: labelFontSize + 'rem' }">{{ title }}</p>
+          <p v-if="series.numBooks" class="text-gray-300 text-xs mt-1 font-medium">{{ series.numBooks }} {{ series.numBooks === 1 ? 'book' : 'books' }}</p>
         </div>
       </div>
     </div>
@@ -62,6 +68,13 @@ export default {
       // For series listing, we may not have books array populated
       // The cover component should handle empty arrays gracefully
       return this.series ? this.series.books || [] : []
+    },
+    hasBookData() {
+      // Check if we have actual book data, not just IDs or empty array
+      if (!this.books.length) return false
+      // If first item is an object with media property, we have full book data
+      const firstBook = this.books[0]
+      return typeof firstBook === 'object' && firstBook !== null && (firstBook.media || firstBook.id)
     },
     seriesBookProgress() {
       return this.books

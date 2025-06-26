@@ -60,6 +60,15 @@ export default {
   },
   methods: {
     getCoverUrl(book) {
+      // Handle case where book might just be an ID string or a book object without full data
+      if (typeof book === 'string') {
+        // If book is just an ID, use the ID-based cover getter
+        return this.store.getters['globals/getLibraryItemCoverSrcById'](book)
+      } else if (book && book.id && (!book.media || !book.media.coverPath)) {
+        // If book has an ID but no media data, use the ID-based getter
+        return this.store.getters['globals/getLibraryItemCoverSrcById'](book.id)
+      }
+      // Otherwise use the normal getter
       return this.store.getters['globals/getLibraryItemCoverSrc'](book, '')
     },
     async buildCoverImg(coverData, bgCoverWidth, offsetLeft, zIndex, forceCoverBg = false) {
@@ -144,14 +153,22 @@ export default {
         this.coverDiv.remove()
         this.coverDiv = null
       }
+      
+      // Debug log book items for series covers
+      if (this.name && this.bookItems.length > 0) {
+        console.log(`[GroupCover] Series "${this.name}" book items:`, this.bookItems.slice(0, 3).map(b => typeof b === 'string' ? b : b.id))
+      }
+      
       var validCovers = this.bookItems
         .map((bookItem) => {
+          // Handle both string IDs and book objects
+          const id = typeof bookItem === 'string' ? bookItem : bookItem.id
           return {
-            id: bookItem.id,
+            id: id,
             coverUrl: this.getCoverUrl(bookItem)
           }
         })
-        .filter((b) => b.coverUrl !== '')
+        .filter((b) => b.coverUrl && b.coverUrl !== '')
       if (!validCovers.length) {
         this.noValidCovers = true
         return

@@ -239,6 +239,17 @@ export default {
         let results = payload.results || payload.series || payload.collections || payload.authors || []
         const total = payload.total !== undefined ? payload.total : results.length
         
+        // Debug logging for series data
+        if (this.entityName === 'series' && results.length > 0) {
+          console.log('[LazyBookshelf] Series data debug:')
+          results.slice(0, 3).forEach((series, index) => {
+            console.log(`Series ${index}: ${series.name} (${series.id})`)
+            if (series.books && series.books.length > 0) {
+              console.log(`  Books: ${series.books.map(b => typeof b === 'string' ? b : b.id).join(', ')}`)
+            }
+          })
+        }
+        
         // Special handling for authors - if server returns all authors, slice only what we need
         if (this.entityName === 'authors' && results.length > this.booksPerFetch) {
           console.log('[LazyBookshelf] Server returned all', results.length, 'authors, slicing to requested range')

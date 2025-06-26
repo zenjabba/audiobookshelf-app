@@ -651,10 +651,35 @@ export default {
     async downloadClick() {
       // Check if already downloading
       const existingDownload = this.$store.getters['globals/getDownloadItem'](this.libraryItemId)
-      if (existingDownload && !existingDownload.isFinished && !existingDownload.failed) {
-        console.warn('[downloadClick] Item is already downloading:', this.libraryItemId)
-        this.$toast.warning('This item is already downloading')
-        return
+      if (existingDownload) {
+        // Check if download is stuck (high progress but not completing)
+        const isStuck = existingDownload.downloadItemParts?.some(part => 
+          !part.completed && !part.failed && part.progress > 90 && part.progress < 100
+        )
+        
+        if (isStuck) {
+          const { value } = await Dialog.confirm({
+            title: 'Stuck Download',
+            message: 'This download appears to be stuck. Would you like to clear it and try again?',
+            okButtonTitle: 'Clear and Retry'
+          })
+          if (value) {
+            // Remove the stuck download
+            this.$store.commit('globals/removeItemDownload', existingDownload.id)
+            
+            // TODO: Add native cancelDownload method to AbsDownloader plugin
+            // For now, removing from store will prevent UI from showing the download
+            
+            // Continue with new download after a short delay
+            await new Promise(resolve => setTimeout(resolve, 500))
+          } else {
+            return
+          }
+        } else if (!existingDownload.isFinished && !existingDownload.failed) {
+          console.warn('[downloadClick] Item is already downloading:', this.libraryItemId)
+          this.$toast.warning('This item is already downloading')
+          return
+        }
       }
       
       if (this.downloadItem || this.startingDownload) return

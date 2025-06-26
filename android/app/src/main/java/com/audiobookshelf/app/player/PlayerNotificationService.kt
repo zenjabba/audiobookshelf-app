@@ -498,6 +498,9 @@ class PlayerNotificationService : MediaBrowserServiceCompat() {
         }
 
         dataSourceFactory.setUserAgent(channelId)
+        dataSourceFactory.setDefaultRequestProperties(
+                hashMapOf("Authorization" to "Bearer ${DeviceManager.token}")
+        )
         mediaSource =
                 ProgressiveMediaSource.Factory(dataSourceFactory, extractorsFactory)
                         .createMediaSource(mediaItems[0])

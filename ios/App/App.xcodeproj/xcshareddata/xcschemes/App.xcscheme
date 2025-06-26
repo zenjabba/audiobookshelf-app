@@ -15,8 +15,8 @@
             <BuildableReference
                BuildableIdentifier = "primary"
                BlueprintIdentifier = "504EC3031FED79650016851F"
-               BuildableName = "Audiobookshelf.app"
-               BlueprintName = "Audiobookshelf"
+               BuildableName = "Datahorders.app"
+               BlueprintName = "Datahorders"
                ReferencedContainer = "container:App.xcodeproj">
             </BuildableReference>
          </BuildActionEntry>
@@ -34,8 +34,8 @@
             <BuildableReference
                BuildableIdentifier = "primary"
                BlueprintIdentifier = "E9E8813928DA5DE500D750C1"
-               BuildableName = "AudiobookshelfUnitTests.xctest"
-               BlueprintName = "AudiobookshelfUnitTests"
+               BuildableName = "DatahordersUnitTests.xctest"
+               BlueprintName = "DatahordersUnitTests"
                ReferencedContainer = "container:App.xcodeproj">
             </BuildableReference>
          </TestableReference>
@@ -56,8 +56,8 @@
          <BuildableReference
             BuildableIdentifier = "primary"
             BlueprintIdentifier = "504EC3031FED79650016851F"
-            BuildableName = "Audiobookshelf.app"
-            BlueprintName = "Audiobookshelf"
+            BuildableName = "Datahorders.app"
+            BlueprintName = "Datahorders"
             ReferencedContainer = "container:App.xcodeproj">
          </BuildableReference>
       </BuildableProductRunnable>
@@ -73,8 +73,8 @@
          <BuildableReference
             BuildableIdentifier = "primary"
             BlueprintIdentifier = "504EC3031FED79650016851F"
-            BuildableName = "Audiobookshelf.app"
-            BlueprintName = "Audiobookshelf"
+            BuildableName = "Datahorders.app"
+            BlueprintName = "Datahorders"
             ReferencedContainer = "container:App.xcodeproj">
          </BuildableReference>
       </BuildableProductRunnable>

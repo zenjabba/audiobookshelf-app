@@ -8,10 +8,10 @@
 import Foundation
 
 enum PlayerEvents: String {
-    case update = "com.audiobookshelf.app.player.update"
-    case closed = "com.audiobookshelf.app.player.closed"
-    case sleepSet = "com.audiobookshelf.app.player.sleep.set"
-    case sleepEnded = "com.audiobookshelf.app.player.sleep.ended"
-    case failed = "com.audiobookshelf.app.player.failed"
-    case localProgress = "com.audiobookshelf.app.player.localProgress"
+    case update = "com.datahorders.app.player.update"
+    case closed = "com.datahorders.app.player.closed"
+    case sleepSet = "com.datahorders.app.player.sleep.set"
+    case sleepEnded = "com.datahorders.app.player.sleep.ended"
+    case failed = "com.datahorders.app.player.failed"
+    case localProgress = "com.datahorders.app.player.localProgress"
 }
